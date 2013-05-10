@@ -34,34 +34,6 @@
 #include "dce_priv.h"
 
 
-/* Would it be good to have MemHeaders for Tiler 2D buffers??     */
-/* Since the decision is to not support allocation of IO buffers, no  */
-/* need to worry about Tiler 2D Buffers. Hence below Memheader */
-/* can be used.                                                                         */
-/*
-typedef struct {
-    dce_memory_type memory_type;
-    union {
-        struct {
-            Uint32 size;
-            Uint32 ducati_addr;
-        } tilerHeader;
-        shm_buf shm_bufHeader;
-    }
-} MemHeader;
-else for Tiler 1D buffers */
-
-/* MemHeader is important because it is necessary to know the           */
-/* size of the parameter buffers on IPU for Cache operations               */
-/* The size can't be assumed as codec supports different inputs           */
-/* For ex: static params can be VIDDEC3_Params, IVIDDEC3_Params */
-/* or IH264DEC_Params                                                                   */
-typedef struct MemHeader {
-    int   size;
-    void *ptr;
-} MemHeader;
-
-
 /* For TILER 2D Buffers : sz       = width                              */
 /*                                : height = nonzero                           */
 /* For other memory_types : height = 0                               */

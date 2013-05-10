@@ -53,6 +53,16 @@
 #define P2H(p) (&(((MemHeader *)(p))[-1]))
 #define H2P(h) ((void *)&(h)[1])
 
+/* MemHeader is important because it is necessary to know the           */
+/* size of the parameter buffers on IPU for Cache operations               */
+/* The size can't be assumed as codec supports different inputs           */
+/* For ex: static params can be VIDDEC3_Params, IVIDDEC3_Params */
+/* or IH264DEC_Params                                                                   */
+typedef struct MemHeader {
+    int   size;
+    void *ptr;
+} MemHeader;
+
 typedef enum mem_type {
     TILER_1D_BUFFER,
     TILER8_2D_BUFFER,
