@@ -224,7 +224,6 @@ Engine_Handle Engine_open(String name, Engine_Attrs *attrs, Engine_Error *ec)
     Engine_Handle       eng_handle = NULL;
 
     _ASSERT(name != '\0', DCE_EINVALID_INPUT);
-    _ASSERT(ec != NULL, DCE_EINVALID_INPUT);
 
     /* Initialize DCE and IPC. In case of Error Deinitialize them */
     _ASSERT_AND_EXECUTE(dce_init() == DCE_EOK, DCE_EIPC_CREATE_FAIL, dce_deinit());
