@@ -93,7 +93,7 @@ enum {
  * and write out raw (unstrided) nv12 frames (one per file).
  */
 
-int                      width, height, padded_width, padded_height, num_buffers, tiler;
+int                      width, height, frames_to_write, padded_width, padded_height, num_buffers, tiler;
 Engine_Handle            engine    = NULL;
 VIDDEC3_Handle           codec     = NULL;
 VIDDEC3_Params          *params    = NULL;
@@ -605,14 +605,14 @@ int main(int argc, char * *argv)
         oned = FALSE;
     }
 
-    if( argc != 8 ) {
-        printf("usage:   %s width height framefile inpattern outpattern codec tilerbuffer\n", argv[0]);
-        printf("example: %s 320 240 frame.txt in.h264 out.yuv h264 tiler\n", argv[0]);
-        printf("example: %s 640 480 frame.txt in.m4v out.yuv mpeg4 nontiler\n", argv[0]);
-        printf("example: %s 720 480 frame.txt in.vc1 out.yuv vc1ap tiler\n", argv[0]);
-        printf("example: %s 320 240 frame.txt in.vc1 out.yuv vc1smp nontiler\n", argv[0]);
-        printf("example: %s 1280 720 frame.txt in.bin out.yuv mjpeg tiler\n", argv[0]);
-        printf("example: %s 1920 1088 frame.txt in.bin out.yuv mpeg2 nontiler\n", argv[0]);
+    if( argc != 9 ) {
+        printf("usage:   %s width height frames_to_write framefile inpattern outpattern codec tilerbuffer\n", argv[0]);
+        printf("example: %s 320 240 30 frame.txt in.h264 out.yuv h264 tiler\n", argv[0]);
+        printf("example: %s 640 480 30 frame.txt in.m4v out.yuv mpeg4 nontiler\n", argv[0]);
+        printf("example: %s 720 480 30 frame.txt in.vc1 out.yuv vc1ap tiler\n", argv[0]);
+        printf("example: %s 320 240 30 frame.txt in.vc1 out.yuv vc1smp nontiler\n", argv[0]);
+        printf("example: %s 1280 720 30 frame.txt in.bin out.yuv mjpeg tiler\n", argv[0]);
+        printf("example: %s 1920 1088 30 frame.txt in.bin out.yuv mpeg2 nontiler\n", argv[0]);
         printf("Currently supported codecs: h264, mpeg4, vc1ap, vc1smp, mjpeg, mpeg2\n");
         return (1);
     }
@@ -620,14 +620,20 @@ int main(int argc, char * *argv)
     /* error checking? */
     width  = atoi(argv[1]);
     height = atoi(argv[2]);
-    frameData   = argv[3];
-    in_pattern  = argv[4];
-    out_pattern = argv[5];
-    strcpy(vid_codec, argv[6]);
-    strcpy(tilerbuffer, argv[7]);
+    frames_to_write = atoi(argv[3]);
+    frameData   = argv[4];
+    in_pattern  = argv[5];
+    out_pattern = argv[6];
+    strcpy(vid_codec, argv[7]);
+    strcpy(tilerbuffer, argv[8]);
 
     printf("Selected codec: %s\n", vid_codec);
     printf("Selected buffer: %s\n", tilerbuffer);
+
+    if( frames_to_write == -1 ) {
+        /* Default : 30 frames to write into output file */
+        frames_to_write = 30;
+    }
 
     enum {
         DCE_TEST_H264   = 1,
@@ -1348,7 +1354,7 @@ int main(int argc, char * *argv)
                     buf = (OutputBuffer *)outArgs->outputID[i];
                     DEBUG("pop: %d (%p)", out_cnt, buf);
 
-                    if( out_cnt < 30 ) {  // write first 30 frames to output file out_cnt < 300
+                    if( out_cnt < frames_to_write ) {  // write first 30 frames to output file out_cnt < 300
                         write_output(out_pattern, out_cnt++, buf->buf + yoff,
                                      buf->buf + uvoff, stride);
                     } else {
