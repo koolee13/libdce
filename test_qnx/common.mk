@@ -44,7 +44,7 @@ CCOPTS+=-g -O0 -Dxdc_target_types__=qnx/targets/arm/std.h
 EXTRA_LIBVPATH += $(PROJECT_ROOT)/../nto/arm/so.le.v7 \
                   $(INSTALL_ROOT_nto)/armle-v7/usr/lib
 
-LDOPTS+= -ldce -lmemmgr -ltilerusr -lsyslink_client -lsharedmemallocator
+LDOPTS+= -ldce -lmemmgr -ltilerusr -lipc_client -lsharedmemallocator
 
 include $(MKFILES_ROOT)/qtargets.mk
 
