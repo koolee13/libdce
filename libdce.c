@@ -144,7 +144,7 @@ static inline void Fill_MmRpc_fxnCtx_Xlt_Array(MmRpc_Xlt *mmrpc_xlt, int index, 
     /* offset : calculated from address of index                                                                                      */
     mmrpc_xlt->index = index;
     mmrpc_xlt->offset = MmRpc_OFFSET(base, addr);
-    mmrpc_xlt->base = (size_t)addr;
+    mmrpc_xlt->base = *(size_t *)addr; //*((void *)addr);
     mmrpc_xlt->handle = (size_t)handle;
 }
 
