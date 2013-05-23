@@ -29,6 +29,7 @@
  * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
  * EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
+
 #include <xdc/std.h>
 #include <stdlib.h>
 #include <string.h>
@@ -51,9 +52,8 @@
 #include <ti/sdo/codecs/mpeg4vdec/impeg4vdec.h>
 #include <ti/sdo/codecs/vc1vdec/ivc1vdec.h>
 #include <ti/sdo/codecs/jpegvdec/ijpegvdec.h>
-#ifdef ENABLE_MPEG2
 #include <ti/sdo/codecs/mpeg2vdec/impeg2vdec.h>
-#endif
+
 #include "ti/shmemallocator/SharedMemoryAllocatorUsr.h"
 #include "libdce.h"
 
@@ -119,11 +119,11 @@ IVC1VDEC_Status          *vc1_status     = NULL;
 IJPEGVDEC_Params          *mjpeg_params       = NULL;
 IJPEGVDEC_DynamicParams   *mjpeg_dynParams    = NULL;
 IJPEGVDEC_Status          *mjpeg_status       = NULL;
-#ifdef ENABLE_MPEG2
+
 IMPEG2VDEC_Params          *mpeg2_params       = NULL;
 IMPEG2VDEC_DynamicParams   *mpeg2_dynParams    = NULL;
 IMPEG2VDEC_Status          *mpeg2_status       = NULL;
-#endif
+
 unsigned int    frameSize[64000]; /* Buffer for keeping frame sizes */
 static int      input_offset = 0;
 
@@ -802,7 +802,7 @@ int main(int argc, char * *argv)
             params->numOutputDataUnits  = 1;
             params->maxWidth            = width;
             break;
-#ifdef ENABLE_MPEG2
+
         case DCE_TEST_MPEG2 :
             params = dce_alloc(sizeof(IMPEG2VDEC_Params));
             if( !params ) {
@@ -815,7 +815,7 @@ int main(int argc, char * *argv)
             params->numOutputDataUnits  = 0;
             params->maxWidth            = padded_width;
             break;
-#endif
+
     }
 
     params->maxHeight           = height;
@@ -897,7 +897,7 @@ int main(int argc, char * *argv)
 
             codec = VIDDEC3_create(engine, "ivahd_jpegvdec", (VIDDEC3_Params *)mjpeg_params);
             break;
-#ifdef ENABLE_MPEG2
+
         case DCE_TEST_MPEG2 :
             mpeg2_params = (IMPEG2VDEC_Params *) params;
             mpeg2_params->outloopDeBlocking = TRUE;
@@ -911,7 +911,7 @@ int main(int argc, char * *argv)
 
             codec = VIDDEC3_create(engine, "ivahd_mpeg2vdec", (VIDDEC3_Params *)mpeg2_params);
             break;
-#endif
+
     }
 
     if( !codec ) {
@@ -942,13 +942,13 @@ int main(int argc, char * *argv)
             dynParams->size = sizeof(IJPEGVDEC_DynamicParams);
             dynParams->lateAcquireArg = -1;
             break;
-#ifdef ENABLE_MPEG2
+
         case DCE_TEST_MPEG2 :
             dynParams = dce_alloc(sizeof(IMPEG2VDEC_DynamicParams));
             dynParams->size = sizeof(IMPEG2VDEC_DynamicParams);
             dynParams->lateAcquireArg = -1;
             break;
-#endif
+
     }
 
     dynParams->decodeHeader  = XDM_DECODE_AU;
@@ -1057,7 +1057,7 @@ int main(int argc, char * *argv)
             DEBUG("dce_alloc IJPEGVDEC_Status successful mjpeg_status=%p", mjpeg_status);
             err = VIDDEC3_control(codec, XDM_SETPARAMS, (VIDDEC3_DynamicParams *) mjpeg_dynParams, (VIDDEC3_Status *) mjpeg_status);
             break;
-#ifdef ENABLE_MPEG2
+
         case DCE_TEST_MPEG2 :
 
             DEBUG("dce_alloc IMPEG2VDEC_DynamicParams successful dynParams=%p", dynParams);
@@ -1078,7 +1078,7 @@ int main(int argc, char * *argv)
             DEBUG("dce_alloc IMPEG2VDEC_Status successful mpeg2_status=%p", mpeg2_status);
             err = VIDDEC3_control(codec, XDM_SETPARAMS, (VIDDEC3_DynamicParams *) mpeg2_dynParams, (VIDDEC3_Status *) mpeg2_status);
             break;
-#endif
+
         default :
             DEBUG("Not implemented or supported codec_switch %d", codec_switch);
     }
@@ -1196,12 +1196,12 @@ int main(int argc, char * *argv)
                     DEBUG("Calling VIDDEC3_control XDM_FLUSH mjpeg_dynParams %p mjpeg_status %p", mjpeg_dynParams, mjpeg_status);
                     err = VIDDEC3_control(codec, XDM_FLUSH, (VIDDEC3_DynamicParams *) mjpeg_dynParams, (VIDDEC3_Status *) mjpeg_status);
                     break;
-#ifdef ENABLE_MPEG2
+
                 case DCE_TEST_MPEG2 :
                     DEBUG("Calling VIDDEC3_control XDM_FLUSH mpeg2_dynParams %p mpeg2_status %p", mpeg2_dynParams, mpeg2_status);
                     err = VIDDEC3_control(codec, XDM_FLUSH, (VIDDEC3_DynamicParams *) mpeg2_dynParams, (VIDDEC3_Status *) mpeg2_status);
                     break;
-#endif
+
             }
 
             /* We have sent the XDM_FLUSH, call VIDDEC3_process until we get
@@ -1245,12 +1245,12 @@ int main(int argc, char * *argv)
                     DEBUG("Calling VIDDEC3_control XDM_FLUSH mjpeg_dynParams %p mjpeg_status %p", mjpeg_dynParams, mjpeg_status);
                     err = VIDDEC3_control(codec, XDM_FLUSH, (VIDDEC3_DynamicParams *) mjpeg_dynParams, (VIDDEC3_Status *) mjpeg_status);
                     break;
-#ifdef ENABLE_MPEG2
+
                 case DCE_TEST_MPEG2 :
                     DEBUG("Calling VIDDEC3_control XDM_FLUSH mpeg2_dynParams %p mpeg2_status %p", mpeg2_dynParams, mpeg2_status);
                     err = VIDDEC3_control(codec, XDM_FLUSH, (VIDDEC3_DynamicParams *) mpeg2_dynParams, (VIDDEC3_Status *) mpeg2_status);
                     break;
-#endif
+
             }
 
             /* We have sent the XDM_FLUSH, call VIDDEC3_process until we get
