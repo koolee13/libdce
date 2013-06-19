@@ -140,11 +140,9 @@ static inline void Fill_MmRpc_fxnCtx_Scalar_Params(MmRpc_Param *mmrpc_params, in
 static inline void Fill_MmRpc_fxnCtx_Xlt_Array(MmRpc_Xlt *mmrpc_xlt, int index, int32_t base, int32_t addr, void *handle)
 {
     /* index : index of params filled in FxnCtx                                                                                        */
-    /* base  : user Virtual Address as per definition in MmRpc and not base from where offset is calculated */
     /* offset : calculated from address of index                                                                                      */
     mmrpc_xlt->index = index;
     mmrpc_xlt->offset = MmRpc_OFFSET(base, addr);
-    mmrpc_xlt->base = *(size_t *)addr; //*((void *)addr);
     mmrpc_xlt->handle = (size_t)handle;
 }
 
