@@ -20,10 +20,10 @@ TITOOLSROOT	?= /usr/local
 TIVIDEOTOOLSROOT	?= $(TITOOLSROOT)
 # Different tool versions can easily be programmed by defining below variables
 # in your environment.
-CEVERSION	?= codec_engine_3_23_00_07
-FCVERSION	?= framework_components_3_23_03_17
-XDAISVERSION	?= xdais_7_23_00_06
-XDCVERSION	?= xdctools_3_25_00_48
+CEVERSION	?= codec_engine_3_24_00_08
+FCVERSION	?= framework_components_3_24_00_09
+XDAISVERSION	?= xdais_7_24_00_04
+XDCVERSION	?= xdctools_3_25_01_65
 IPCHEADERS	?= $(INSTALL_ROOT_nto)
 
 # Generate the full package paths for tools
