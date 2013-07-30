@@ -30,67 +30,58 @@
  * EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef __MEMPLUGIN_H__
-#define __MEMPLUGIN_H__
+#include "memplugin.h"
+#include "dce_priv.h"
 
-#include <stdlib.h>
-#include <string.h>
-#include <stdio.h>
+extern struct omap_device   *dev;
 
 
-#if defined(BUILDOS_LINUX)
-#include <xf86drm.h>
-#include <omap_drm.h>
-#include <omap_drmif.h>
-#endif /* BUILDOS_LINUX */
+/*  memplugin_alloc - allocates omap_bo buffer with a header above it.
+ *  @sz: Size of the buffer requsted
+ *  @height: this parameter is currently not used
+ *  @memory_type : Currently dce_alloc is used on for parameter buffer
+ *  Returns a virtual address pointer to omap_bo buffer or the param buffer
+ */
+void *memplugin_alloc(int sz, int height, mem_type memory_type)
+{
+    MemHeader        *h;
+    struct omap_bo   *bo = omap_bo_new(dev, sz + sizeof(MemHeader), OMAP_BO_WC);
 
+    if( !bo ) {
+        return (NULL);
+    }
 
-#if defined(BUILDOS_QNX)
-/* IPC Headers */
-#include <tilermem.h>
-#include <SharedMemoryAllocatorUsr.h>
-#include <memmgr.h>
-#endif /* BUILDOS_QNX */
+    h = omap_bo_map(bo);
+    memset(H2P(h), 0, sz);
+    h->size = sz;
+    h->ptr = (void *)bo;
 
+    return (H2P(h));
 
-#define P2H(p) (&(((MemHeader *)(p))[-1]))
-#define H2P(h) ((void *)&(h)[1])
+}
 
+/*
+ * @ptr: pointer to omap_bo buffer, to be freed
+ * @memory_type: Currently dce_free is called on parameter buffers only
+ */
+void memplugin_free(void *ptr, mem_type memory_type)
+{
+    if( ptr ) {
+        MemHeader   *h = P2H(ptr);
+        omap_bo_del((struct omap_bo *)h->ptr);
+    }
+}
 
-/* MemHeader is important because it is necessary to know the           */
-/* size of the parameter buffers on IPU for Cache operations               */
-/* The size can't be assumed as codec supports different inputs           */
-/* For ex: static params can be VIDDEC3_Params, IVIDDEC3_Params */
-/* or IH264DEC_Params                                                                   */
-typedef struct MemHeader {
-    int   size;
-    void *ptr;
-} MemHeader;
-
-
-typedef enum mem_type {
-    TILER_1D_BUFFER,
-    TILER8_2D_BUFFER,
-    TILER16_2D_BUFFER,
-    SHARED_MEMORY_BUFFER,
-    MEM_MAX
-} mem_type;
-
-
-/* DCE Error Types */
-typedef enum mem_error_status {
-    MEM_EOK = 0,
-    MEM_EINVALID_INPUT = -1,
-    MEM_EOUT_OF_TILER_MEMORY = -2,
-    MEM_EOUT_OF_SHMEMORY = -3,
-    MEM_EOUT_OF_SYSTEM_MEMORY = -4
-} mem_error_status;
-
-void *memplugin_alloc(int sz, int height, mem_type memory_type);
-
-void memplugin_free(void *ptr, mem_type memory_type);
-
-int memplugin_share(void *ptr);
-
-#endif /* __MEMPLUGIN_H__ */
+/* memplugin_share - converts the omap_bo buffer into dmabuf
+ * @ptr : pointer of omap_bo buffer, to be converted to fd
+ * Returns a file discriptor for the omap_bo buffer
+ */
+int memplugin_share(void *ptr)
+{
+    if( ptr ) {
+        MemHeader   *h = P2H(ptr);
+        return (omap_bo_dmabuf((struct omap_bo *)h->ptr));
+    }
+    return (-1);
+}
 

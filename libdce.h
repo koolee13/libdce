@@ -60,7 +60,7 @@ void *dce_alloc(int sz);
 void dce_free(void *ptr);
 
 
-#if defined(BUILDOS_GLP)
+#if defined(BUILDOS_LINUX)
 void dce_set_fd(int fd);
 int dce_get_fd();
 
@@ -68,12 +68,9 @@ int dce_get_fd();
 #define xdc__ARGTOPTR
 #define xdc__ARGTOFXN
 
-struct omap_device   *dce_init(void);
-void dce_deinit(struct omap_device *dev);
-
 #define XDM_MEMTYPE_BO 10
 #define XDM_MEMTYPE_BO_OFFSET 11
-#endif /* BUILDOS_GLP */
+#endif /* BUILDOS_LINUX */
 
 #endif /* __LIBDCE_H__ */
 

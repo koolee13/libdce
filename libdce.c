@@ -71,12 +71,11 @@
 
 #include <xdc/std.h>
 
-#if defined(BUILDOS_GLP)
+#if defined(BUILDOS_LINUX)
 #include <xf86drm.h>
 #include <omap_drm.h>
-#include <omap_dce.h>
 #include <omap_drmif.h>
-#endif /* BUILDOS_GLP */
+#endif /* BUILDOS_LINUX */
 
 /* IPC Headers */
 #include <MmRpc.h>
@@ -88,21 +87,19 @@
 #include "memplugin.h"
 
 
-#if defined(BUILDOS_GLP)
-#ifdef GLP_X11
-int dce_auth_x11(int *fd);
-#endif /* GLP_X11 */
-#ifdef GLP_WAYLAND
-int dce_auth_wayland(int *fd);
-#endif /* GLP_WAYLAND */
+#if defined(BUILDOS_LINUX)
+#ifdef HAVE_X11
+// Defined from configure.ac
+extern int dce_auth_x11(int *fd);
+#endif /* HAVE_X11 */
+#ifdef HAVE_WAYLAND   // Defined from configure.ac
+extern int dce_auth_wayland(int *fd);
+#endif /* HAVE_WAYLAND */
 
-static int                   fd = -1;
-static struct omap_device   *dev;
-static int                   ioctl_base;
-#define CMD(name) (ioctl_base + DRM_OMAP_DCE_##name)
-
-uint32_t    dce_debug = 3;
-#endif /* BUILDOS_GLP */
+int                     fd                 = -1;
+struct   omap_device   *dev   =  0;
+uint32_t                dce_debug          =  3;
+#endif /* BUILDOS_LINUX */
 
 
 /********************* GLOBALS ***********************/
@@ -181,6 +178,42 @@ static int dce_init(void)
     _ASSERT_AND_EXECUTE(eError == DCE_EOK, DCE_EIPC_CREATE_FAIL, count--);
 
     printf("open(/dev/" DCE_DEVICE_NAME ") -> 0x%x\n", (int)MmRpcHandle);
+
+#if defined(BUILDOS_LINUX)
+    /* Open omapdrm device */
+    int    authenticated = 0;
+
+#ifdef HAVE_X11
+    /*If X11 server is running*/
+    if( !authenticated ) {
+        int    ret = dce_auth_x11(&fd);
+        if( !ret ) {
+            authenticated = 1;
+        }
+    }
+#endif
+#ifdef HAVE_WAYLAND
+    /*If Wayland windowing is supported*/
+    if( !authenticated ) {
+        int    ret = dce_auth_wayland(&fd);
+        if( !ret ) {
+            authenticated = 1;
+        }
+    }
+#endif
+    if((fd == -1) && !authenticated ) {
+        printf("no X11/wayland, fallback to opening DRM device directly\n");
+        fd = drmOpen("omapdrm", "platform:omapdrm:00");
+    }
+    if( fd >= 0 ) {
+        dev = omap_device_new(fd);
+    } else {
+        printf("Error opening omapdrm : drmOpen failed");
+        goto EXIT;
+    }
+#endif /* BUILDOS_LINUX */
+
+
 EXIT:
     pthread_mutex_unlock(&mutex);
     return (eError);
@@ -199,10 +232,33 @@ static void dce_deinit(void)
         MmRpc_delete(&MmRpcHandle);
     }
     MmRpcHandle = NULL;
+
+#if defined(BUILDOS_LINUX)
+    omap_device_del(dev);
+    dev = NULL;
+    close(fd);
+    fd = -1;
+#endif /* BUILDOS_LINUX */
+
+
 EXIT:
     pthread_mutex_unlock(&mutex);
     return;
 }
+
+/* Incase of X11 or Wayland the fd can be shared to libdce using this call */
+#if defined(BUILDOS_LINUX)
+void dce_set_fd(int dce_fd)
+{
+    fd = dce_fd;
+}
+
+int dce_get_fd(void)
+{
+    return (fd);
+}
+
+#endif /* BUILDOS_LINUX */
 
 /*===============================================================*/
 /** Engine_open        : Open Codec Engine.

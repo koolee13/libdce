@@ -33,7 +33,10 @@
 #ifndef __DCE_PRIV_H__
 #define __DCE_PRIV_H__
 
+
+#ifdef BUILDOS_QNX
 #include <sys/slog.h>
+
 
 /********************* MACROS ************************/
 /***************** TRACE MACROS  *********************/
@@ -44,7 +47,16 @@
 #define DEBUG(FMT, ...)  do { \
         slogf(42, _SLOG_DEBUG2, "%s:%d:\t%s\tdebug: " FMT, __FILE__, __LINE__, __FUNCTION__, ##__VA_ARGS__); \
 } while( 0 )
+#endif
 
+#ifdef BUILDOS_LINUX
+#define ERROR(FMT, ...) do { \
+	printf("%s:%d:\t%s\t Error: "FMT,__FILE__, __LINE__,__FUNCTION__ ,##__VA_ARGS__); \
+}while( 0 )
+#define DEBUG(FMT, ...) do { \
+	printf("%s:%d:\t%s\t Debug: "FMT,__FILE__, __LINE__,__FUNCTION__ ,##__VA_ARGS__); \
+}while( 0 )
+#endif
 
 /***************** ASSERT MACROS *********************/
 #define _ASSERT_AND_EXECUTE(_COND_, _ERRORCODE_, _EXPR_) do { \
