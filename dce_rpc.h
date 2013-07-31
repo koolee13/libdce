@@ -44,6 +44,11 @@
 
 #define DCE_DEVICE_NAME "rpmsg-dce"
 
+#define MAX_NAME_LENGTH 32
+#define MAX_INPUT_BUF 2 // Need to confirm for interlaced YUVs for Encoders
+#define MAX_OUTPUT_BUF 2
+#define MAX_TOTAl_BUF (MAX_INPUT_BUF + MAX_OUTPUT_BUF)
+
 /* Message-Ids:
  */
 //#define DCE_RPC_CONNECT         (0x80000000 | 00) Connect not needed anymore.
@@ -70,76 +75,10 @@ typedef struct dce_connect {
 } dce_connect;
 
 typedef struct dce_engine_open {
-    char          name[32]; /* engine name (in) */
-    Engine_Error  error_code;   /* error code (out) */
-    Engine_Handle eng_handle;   /* engine handle (out) */
+    char          name[MAX_NAME_LENGTH];      /* engine name (in) */
+    Engine_Attrs *engine_attrs;  /* engine attributes (out) */
+    Engine_Error  error_code;    /* error code (out) */
 } dce_engine_open;
-
-typedef struct dce_engine_close {
-    Engine_Handle eng_handle;   /* engine handle (in) */
-} dce_engine_close;
-
-typedef struct dce_codec_create {
-    Engine_Handle  engine;
-    char           codec_name[32];
-    void          *static_params;
-    dce_codec_type codec_id;
-    void          *codec_handle;
-} dce_codec_create;
-
-typedef struct dce_codec_control {
-    void          *codec_handle;
-    uint32_t       cmd_id;
-    void          *dyn_params;
-    void          *status;
-    dce_codec_type codec_id;
-    int32_t        result;
-} dce_codec_control;
-
-typedef struct dce_codec_get_version {
-    void          *codec_handle;
-    void          *dyn_params;
-    void          *status;
-    void          *version;
-    dce_codec_type codec_id;
-    int32_t        result;
-} dce_codec_get_version;
-
-typedef struct dce_codec_delete {
-    void          *codec_handle;
-    dce_codec_type codec_id;
-} dce_codec_delete;
-
-/*  ---------------------- For GLP DCE -----------------------------*/
-/* NOTE: CODEC_PROCESS does somewhat more than the other ioctls, in that it
- * handles buffer mapping/unmapping.  So the inBufs/outBufs are copied inline
- * (with translated addresses in the copy sent inline with codec_process_req).
- * Since we need the inputID from inArgs, and it is a small struct, it is also
- * copied inline.
- *
- * Therefore, the variable length data[] section has the format:
- *    uint8_t reloc[reloc_length * 4];
- *    uint8_t inargs[in_args_length * 4];
- *    uint8_t outbufs[in_bufs_length * 4];
- *    uint8_t inbufs[in_bufs_length * 4];
- */
-
-#define MAX_INPUT_BUF 2 // Need to confirm for interlaced YUVs for Encoders
-#define MAX_OUTPUT_BUF 2
-#define MAX_TOTAl_BUF (MAX_INPUT_BUF + MAX_OUTPUT_BUF)
-
-/* Struct to be used if approach [3] of Mmrpc call is followed */
-typedef struct dce_codec_process {
-    void          *codec_handle;
-    void          *inBufs;
-    void          *outBufs;
-    void          *inArgs;
-    void          *outArgs;
-    int32_t        input_Buf[MAX_INPUT_BUF];
-    int32_t        output_Buf[MAX_OUTPUT_BUF];
-    dce_codec_type codec_id;
-    int32_t        result;
-} dce_codec_process;
 
 #endif /* __DCE_RPC_H__ */
 

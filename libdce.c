@@ -216,10 +216,10 @@ EXIT:
 Engine_Handle Engine_open(String name, Engine_Attrs *attrs, Engine_Error *ec)
 {
     MmRpc_FxnCtx        fxnCtx;
-    int32_t             fxnRet;
     dce_error_status    eError = DCE_EOK;
     dce_engine_open    *engine_open_msg = NULL;
-    Engine_Handle       eng_handle = NULL;
+    Engine_Attrs       *engine_attrs = NULL;
+    Engine_Handle       engine_handle = NULL;
 
     _ASSERT(name != '\0', DCE_EINVALID_INPUT);
 
@@ -228,34 +228,39 @@ Engine_Handle Engine_open(String name, Engine_Attrs *attrs, Engine_Error *ec)
 
     printf(">> Engine_open Params::name = %s size = %d\n", name, strlen(name));
     /* Allocate Shared memory for the engine_open rpc msg structure*/
-    /* Tiler Memory preferred for now for First level testing */
+    /* Tiler Memory preferred in QNX */
     engine_open_msg = memplugin_alloc(sizeof(dce_engine_open), 0, TILER_1D_BUFFER);
+    _ASSERT_AND_EXECUTE(engine_open_msg != NULL, DCE_EOUT_OF_MEMORY, engine_handle = NULL);
 
-    _ASSERT_AND_EXECUTE(engine_open_msg != NULL, DCE_EOUT_OF_MEMORY, eng_handle = NULL);
-
+    if( attrs ) {
+        engine_attrs = memplugin_alloc(sizeof(Engine_Attrs), 0, TILER_1D_BUFFER);
+        _ASSERT_AND_EXECUTE(engine_attrs != NULL, DCE_EOUT_OF_MEMORY, engine_handle = NULL);
+        *engine_attrs = *attrs;
+    }
     /* Populating the msg structure with all the params */
     /* Populating all params into a struct avoid individual address translations of name, ec */
     strncpy(engine_open_msg->name, name, strlen(name));
-    engine_open_msg->eng_handle = NULL;
+    engine_open_msg->engine_attrs = engine_attrs;
 
     /* Marshall function arguments into the send buffer */
     Fill_MmRpc_fxnCtx(&fxnCtx, DCE_RPC_ENGINE_OPEN, 1, 0, NULL);
     Fill_MmRpc_fxnCtx_Ptr_Params(fxnCtx.params, sizeof(dce_engine_open), engine_open_msg, NULL);
 
     /* Invoke the Remote function through MmRpc */
-    eError = MmRpc_call(MmRpcHandle, &fxnCtx, &fxnRet);
+    eError = MmRpc_call(MmRpcHandle, &fxnCtx, (int32_t *)(&engine_handle));
 
     /* In case of Error, the Application will get a NULL Engine Handle */
-    _ASSERT_AND_EXECUTE(eError == DCE_EOK, DCE_EIPC_CALL_FAIL, eng_handle = NULL);
+    _ASSERT_AND_EXECUTE(eError == DCE_EOK, DCE_EIPC_CALL_FAIL, engine_handle = NULL);
 
-    /* Populate return arguments */
-    eng_handle = engine_open_msg->eng_handle;
-    ec[0] = engine_open_msg->error_code;
-
+    if( ec ) {
+        *ec = engine_open_msg->error_code;
+    }
 EXIT:
     memplugin_free(engine_open_msg, TILER_1D_BUFFER);
-
-    return (eng_handle);
+    if( engine_attrs ) {
+        memplugin_free(engine_attrs, TILER_1D_BUFFER);
+    }
+    return ((Engine_Handle)engine_handle);
 }
 
 /*===============================================================*/
@@ -268,21 +273,12 @@ Void Engine_close(Engine_Handle engine)
     MmRpc_FxnCtx        fxnCtx;
     int32_t             fxnRet;
     dce_error_status    eError = DCE_EOK;
-    dce_engine_close   *engine_close_msg = NULL;
 
     _ASSERT(engine != NULL, DCE_EINVALID_INPUT);
 
-    /* Allocate Shared/Tiler memory for the engine_close rpc msg structure*/
-    engine_close_msg = memplugin_alloc(sizeof(dce_engine_close), 0, TILER_1D_BUFFER);
-
-    _ASSERT(engine_close_msg != NULL, DCE_EOUT_OF_MEMORY);
-
-    /* Populating the msg structure with all the params */
-    engine_close_msg->eng_handle = engine;
-
     /* Marshall function arguments into the send buffer */
     Fill_MmRpc_fxnCtx(&fxnCtx, DCE_RPC_ENGINE_CLOSE, 1, 0, NULL);
-    Fill_MmRpc_fxnCtx_Ptr_Params(fxnCtx.params, sizeof(dce_engine_close), engine_close_msg, NULL);
+    Fill_MmRpc_fxnCtx_Scalar_Params(fxnCtx.params, sizeof(Engine_Handle), (int32_t)engine);
 
     /* Invoke the Remote function through MmRpc */
     eError = MmRpc_call(MmRpcHandle, &fxnCtx, &fxnRet);
@@ -290,8 +286,6 @@ Void Engine_close(Engine_Handle engine)
     _ASSERT(eError == DCE_EOK, DCE_EIPC_CALL_FAIL);
 
 EXIT:
-    memplugin_free(engine_close_msg, TILER_1D_BUFFER);
-
     dce_deinit();
     return;
 }
@@ -313,49 +307,36 @@ EXIT:
 static void *create(Engine_Handle engine, String name, void *params, dce_codec_type codec_id)
 {
     MmRpc_FxnCtx        fxnCtx;
-    MmRpc_Xlt           xltAry;
-    int32_t             fxnRet;
     dce_error_status    eError = DCE_EOK;
-    dce_codec_create   *codec_create_msg = NULL;
     void               *codec_handle = NULL;
+    char               *codec_name = NULL;
 
     _ASSERT(name != '\0', DCE_EINVALID_INPUT);
     _ASSERT(engine != NULL, DCE_EINVALID_INPUT);
     _ASSERT(params != NULL, DCE_EINVALID_INPUT);
 
-    /* Allocate Shared/Tiler memory for the codec_create rpc msg structure*/
-    codec_create_msg = memplugin_alloc(sizeof(dce_codec_create), 0, TILER_1D_BUFFER);
+    /* Allocate shared memory for translating codec name to IPU */
+    codec_name = memplugin_alloc(MAX_NAME_LENGTH * sizeof(char), 0, TILER_1D_BUFFER);
+    _ASSERT_AND_EXECUTE(codec_name != NULL, DCE_EOUT_OF_MEMORY, codec_handle = NULL);
 
-    _ASSERT_AND_EXECUTE(codec_create_msg != NULL, DCE_EOUT_OF_MEMORY, codec_handle = NULL);
-
-    /* Populating the msg structure with all the params */
-    codec_create_msg->engine = engine;
-    strncpy(codec_create_msg->codec_name, name, strlen(name));
-    codec_create_msg->codec_id = codec_id;
-    codec_create_msg->codec_handle = NULL;
-    codec_create_msg->static_params = params;
+    strncpy(codec_name, name, strlen(name));
 
     /* Marshall function arguments into the send buffer */
-    Fill_MmRpc_fxnCtx(&fxnCtx, DCE_RPC_CODEC_CREATE, 1, 1, &xltAry);
-    Fill_MmRpc_fxnCtx_Ptr_Params(&(fxnCtx.params[0]), sizeof(dce_codec_create), codec_create_msg, NULL);
-
-    /* Mention the virtual pointers that need translation */
-    /* Allocations through dce_alloc need translation     */
-    /* In this case the static params buffer need translation */
-    Fill_MmRpc_fxnCtx_Xlt_Array(fxnCtx.xltAry, 0, (int32_t)codec_create_msg, (int32_t)&(codec_create_msg->static_params), NULL);
+    Fill_MmRpc_fxnCtx(&fxnCtx, DCE_RPC_CODEC_CREATE, 4, 0, NULL);
+    Fill_MmRpc_fxnCtx_Scalar_Params(&(fxnCtx.params[0]), sizeof(int32_t), codec_id);
+    Fill_MmRpc_fxnCtx_Scalar_Params(&(fxnCtx.params[1]), sizeof(Engine_Handle), (int32_t)engine);
+    Fill_MmRpc_fxnCtx_Ptr_Params(&(fxnCtx.params[2]), (P2H(codec_name))->size, codec_name, NULL);
+    Fill_MmRpc_fxnCtx_Ptr_Params(&(fxnCtx.params[3]), (P2H(params))->size, params, NULL);
 
     /* Invoke the Remote function through MmRpc */
-    eError = MmRpc_call(MmRpcHandle, &fxnCtx, &fxnRet);
+    eError = MmRpc_call(MmRpcHandle, &fxnCtx, (int32_t *)(&codec_handle));
 
     /* In case of Error, the Application will get a NULL Codec Handle */
     _ASSERT_AND_EXECUTE(eError == DCE_EOK, DCE_EIPC_CALL_FAIL, codec_handle = NULL);
 
-    codec_handle = codec_create_msg->codec_handle;
-
 EXIT:
-    memplugin_free(codec_create_msg, TILER_1D_BUFFER);
-
-    return (codec_handle);
+    memplugin_free(codec_name, TILER_1D_BUFFER);
+    return ((void *)codec_handle);
 }
 
 /*===============================================================*/
@@ -375,47 +356,30 @@ EXIT:
  */
 static XDAS_Int32 control(void *codec, int id, void *dynParams, void *status, dce_codec_type codec_id)
 {
-    MmRpc_FxnCtx         fxnCtx;
-    MmRpc_Xlt            xltAry[2];
-    int32_t              fxnRet;
-    dce_error_status     eError = DCE_EOK;
-    dce_codec_control   *codec_control_msg = NULL;
+    MmRpc_FxnCtx        fxnCtx;
+    int32_t             fxnRet;
+    dce_error_status    eError = DCE_EOK;
 
     _ASSERT(codec != NULL, DCE_EINVALID_INPUT);
     _ASSERT(dynParams != NULL, DCE_EINVALID_INPUT);
     _ASSERT(status != NULL, DCE_EINVALID_INPUT);
 
-    /* Allocate Shared/Tiler memory for the codec_control rpc msg structure*/
-    codec_control_msg = memplugin_alloc(sizeof(dce_codec_control), 0, TILER_1D_BUFFER);
-
-    _ASSERT(codec_control_msg != NULL, DCE_EOUT_OF_MEMORY);
-
-    /* Populating the msg structure with all the params */
-    codec_control_msg->codec_handle = codec;
-    codec_control_msg->cmd_id = id;
-    codec_control_msg->codec_id = codec_id;
-    codec_control_msg->dyn_params = dynParams;
-    codec_control_msg->status = status;
-
     /* Marshall function arguments into the send buffer */
-    Fill_MmRpc_fxnCtx(&fxnCtx, DCE_RPC_CODEC_CONTROL, 1, 2, xltAry);
-    Fill_MmRpc_fxnCtx_Ptr_Params(fxnCtx.params, sizeof(dce_codec_control), codec_control_msg, NULL);
-
-    /* Dynamic and status params buffer need translation */
-    Fill_MmRpc_fxnCtx_Xlt_Array(fxnCtx.xltAry, 0, (int32_t)codec_control_msg, (int32_t)&(codec_control_msg->dyn_params), NULL);
-    Fill_MmRpc_fxnCtx_Xlt_Array(&(fxnCtx.xltAry[1]), 0, (int32_t)codec_control_msg, (int32_t)&(codec_control_msg->status), NULL);
+    Fill_MmRpc_fxnCtx(&fxnCtx, DCE_RPC_CODEC_CONTROL, 5, 0, NULL);
+    Fill_MmRpc_fxnCtx_Scalar_Params(&(fxnCtx.params[0]), sizeof(int32_t), codec_id);
+    Fill_MmRpc_fxnCtx_Scalar_Params(&(fxnCtx.params[1]), sizeof(int32_t), (int32_t)codec);
+    Fill_MmRpc_fxnCtx_Scalar_Params(&(fxnCtx.params[2]), sizeof(int32_t), (int32_t)id);
+    Fill_MmRpc_fxnCtx_Ptr_Params(&(fxnCtx.params[3]), (P2H(dynParams))->size, dynParams, NULL);
+    Fill_MmRpc_fxnCtx_Ptr_Params(&(fxnCtx.params[4]), (P2H(status))->size, status, NULL);
 
     /* Invoke the Remote function through MmRpc */
     eError = MmRpc_call(MmRpcHandle, &fxnCtx, &fxnRet);
 
     _ASSERT(eError == DCE_EOK, DCE_EIPC_CALL_FAIL);
 
-    eError = codec_control_msg->result;
-
 EXIT:
-    memplugin_free(codec_control_msg, TILER_1D_BUFFER);
+    return (fxnRet);
 
-    return (eError);
 }
 
 /*===============================================================*/
@@ -437,61 +401,49 @@ EXIT:
  */
 static XDAS_Int32 get_version(void *codec, void *dynParams, void *status, dce_codec_type codec_id)
 {
-    MmRpc_FxnCtx             fxnCtx;
-    MmRpc_Xlt                xltAry[3];
-    int32_t                  fxnRet;
-    dce_error_status         eError = DCE_EOK;
-    dce_codec_get_version   *codec_get_version_msg = NULL;
+    MmRpc_FxnCtx        fxnCtx;
+    MmRpc_Xlt           xltAry;
+    void             * *version_buf = NULL;
+    int32_t             fxnRet;
+    dce_error_status    eError = DCE_EOK;
 
     _ASSERT(codec != NULL, DCE_EINVALID_INPUT);
     _ASSERT(dynParams != NULL, DCE_EINVALID_INPUT);
     _ASSERT(status != NULL, DCE_EINVALID_INPUT);
 
-    /* Allocate Shared/Tiler memory for the codec_get_version rpc msg structure*/
-    codec_get_version_msg = memplugin_alloc(sizeof(dce_codec_get_version), 0, TILER_1D_BUFFER);
-
-    _ASSERT(codec_get_version_msg != NULL, DCE_EOUT_OF_MEMORY);
-
-    /* Populating the msg structure with all the params */
-    codec_get_version_msg->codec_handle = codec;
-    codec_get_version_msg->codec_id = codec_id;
-    codec_get_version_msg->dyn_params = dynParams;
-    codec_get_version_msg->status = status;
     if( codec_id == OMAP_DCE_VIDDEC3 ) {
-        codec_get_version_msg->version = ((IVIDDEC3_Status *)status)->data.buf;
+        version_buf = (void * *)(&(((IVIDDEC3_Status *)status)->data.buf));
     } else if( codec_id == OMAP_DCE_VIDENC2 ) {
-        codec_get_version_msg->version = ((IVIDDEC3_Status *)status)->data.buf;
+        version_buf = (void * *)(&(((IVIDENC2_Status *)status)->data.buf));
     }
+    _ASSERT(*version_buf != NULL, DCE_EINVALID_INPUT);
 
     /* Marshall function arguments into the send buffer */
-    Fill_MmRpc_fxnCtx(&fxnCtx, DCE_RPC_CODEC_CONTROL, 1, 3, xltAry);
-    Fill_MmRpc_fxnCtx_Ptr_Params(fxnCtx.params, sizeof(dce_codec_get_version), codec_get_version_msg, NULL);
+    Fill_MmRpc_fxnCtx(&fxnCtx, DCE_RPC_CODEC_GET_VERSION, 4, 1, &xltAry);
+    Fill_MmRpc_fxnCtx_Scalar_Params(&(fxnCtx.params[0]), sizeof(int32_t), codec_id);
+    Fill_MmRpc_fxnCtx_Scalar_Params(&(fxnCtx.params[1]), sizeof(int32_t), (int32_t)codec);
+    Fill_MmRpc_fxnCtx_Ptr_Params(&(fxnCtx.params[2]), (P2H(dynParams))->size, dynParams, NULL);
+    Fill_MmRpc_fxnCtx_Ptr_Params(&(fxnCtx.params[3]), (P2H(status))->size, status, NULL);
 
-    /* Dynamic, status params and version info buffer need translation */
-    Fill_MmRpc_fxnCtx_Xlt_Array(fxnCtx.xltAry, 0, (int32_t)codec_get_version_msg, (int32_t)&(codec_get_version_msg->dyn_params), NULL);
-    Fill_MmRpc_fxnCtx_Xlt_Array(&(fxnCtx.xltAry[1]), 0, (int32_t)codec_get_version_msg, (int32_t)&(codec_get_version_msg->status), NULL);
-    Fill_MmRpc_fxnCtx_Xlt_Array(&(fxnCtx.xltAry[2]), 0, (int32_t)codec_get_version_msg, (int32_t)&(codec_get_version_msg->version), NULL);
+    /* Address Translation needed for buffer for version Info */
+    Fill_MmRpc_fxnCtx_Xlt_Array(fxnCtx.xltAry, 3, (int32_t)status, (int32_t)version_buf, NULL);
 
     /* Invoke the Remote function through MmRpc */
     eError = MmRpc_call(MmRpcHandle, &fxnCtx, &fxnRet);
 
     _ASSERT(eError == DCE_EOK, DCE_EIPC_CALL_FAIL);
 
-    eError = codec_get_version_msg->result;
-
 EXIT:
-    memplugin_free(codec_get_version_msg, TILER_1D_BUFFER);
-
-    return (eError);
+    return (fxnRet);
 }
 
 typedef enum process_call_params {
-    CODEC_HANDLE_INDEX = 0,
+    CODEC_ID_INDEX = 0,
+    CODEC_HANDLE_INDEX,
     INBUFS_INDEX,
     OUTBUFS_INDEX,
     INARGS_INDEX,
-    OUTARGS_INDEX,
-    CODEC_ID_INDEX
+    OUTARGS_INDEX
 } process_call_params;
 
 /*===============================================================*/
@@ -514,7 +466,7 @@ static XDAS_Int32 process(void *codec, void *inBufs, void *outBufs,
 {
     MmRpc_FxnCtx        fxnCtx;
     MmRpc_Xlt           xltAry[MAX_TOTAl_BUF];
-    int                 fxnRet, count, total_count, numInBufs = 0, numOutBufs = 0, sz[5] = { 0 };
+    int                 fxnRet, count, total_count, numInBufs = 0, numOutBufs = 0, sz[OUTARGS_INDEX + 1] = { 0 };
     dce_error_status    eError = DCE_EOK;
 
     _ASSERT(codec != NULL, DCE_EINVALID_INPUT);
@@ -542,12 +494,12 @@ static XDAS_Int32 process(void *codec, void *inBufs, void *outBufs,
     /* marshall function arguments into the send buffer                       */
     /* Approach [2] as explained in "Notes" used for process               */
     Fill_MmRpc_fxnCtx(&fxnCtx, DCE_RPC_CODEC_PROCESS, 6, numInBufs + numOutBufs, xltAry);
+    Fill_MmRpc_fxnCtx_Scalar_Params(&(fxnCtx.params[CODEC_ID_INDEX]), sizeof(int32_t), codec_id);
     Fill_MmRpc_fxnCtx_Scalar_Params(&(fxnCtx.params[CODEC_HANDLE_INDEX]), sizeof(int32_t), (int32_t)codec);
     Fill_MmRpc_fxnCtx_Ptr_Params(&(fxnCtx.params[INBUFS_INDEX]), sz[INBUFS_INDEX], inBufs, NULL);
     Fill_MmRpc_fxnCtx_Ptr_Params(&(fxnCtx.params[OUTBUFS_INDEX]), sz[OUTBUFS_INDEX], outBufs, NULL);
     Fill_MmRpc_fxnCtx_Ptr_Params(&(fxnCtx.params[INARGS_INDEX]), sz[INARGS_INDEX], inArgs, NULL);
     Fill_MmRpc_fxnCtx_Ptr_Params(&(fxnCtx.params[OUTARGS_INDEX]), sz[OUTARGS_INDEX], outArgs, NULL);
-    Fill_MmRpc_fxnCtx_Scalar_Params(&(fxnCtx.params[CODEC_ID_INDEX]), sizeof(int32_t), codec_id);
 
     /* InBufs, OutBufs, InArgs, OutArgs buffer need translation but since they have been */
     /* individually mentioned as fxnCtx Params, they need not be mentioned below again */
@@ -586,22 +538,13 @@ static void delete(void *codec, dce_codec_type codec_id)
     MmRpc_FxnCtx        fxnCtx;
     int32_t             fxnRet;
     dce_error_status    eError = DCE_EOK;
-    dce_codec_delete   *codec_delete_msg = NULL;
 
     _ASSERT(codec != NULL, DCE_EINVALID_INPUT);
 
-    /* Allocate Shared/Tiler memory for the codec_delete rpc msg structure*/
-    codec_delete_msg = memplugin_alloc(sizeof(dce_codec_delete), 0, TILER_1D_BUFFER);
-
-    _ASSERT(codec_delete_msg != NULL, DCE_EOUT_OF_MEMORY);
-
-    /* Populating the msg structure with all the params */
-    codec_delete_msg->codec_handle = codec;
-    codec_delete_msg->codec_id = codec_id;
-
     /* Marshall function arguments into the send buffer */
-    Fill_MmRpc_fxnCtx(&fxnCtx, DCE_RPC_CODEC_DELETE, 1, 0, NULL);
-    Fill_MmRpc_fxnCtx_Ptr_Params(fxnCtx.params, sizeof(dce_codec_delete), codec_delete_msg, NULL);
+    Fill_MmRpc_fxnCtx(&fxnCtx, DCE_RPC_CODEC_DELETE, 2, 0, NULL);
+    Fill_MmRpc_fxnCtx_Scalar_Params(&(fxnCtx.params[0]), sizeof(int32_t), codec_id);
+    Fill_MmRpc_fxnCtx_Scalar_Params(&(fxnCtx.params[1]), sizeof(int32_t), (int32_t)codec);
 
     /* Invoke the Remote function through MmRpc */
     eError = MmRpc_call(MmRpcHandle, &fxnCtx, &fxnRet);
@@ -609,8 +552,6 @@ static void delete(void *codec, dce_codec_type codec_id)
     _ASSERT(eError == DCE_EOK, DCE_EIPC_CALL_FAIL);
 
 EXIT:
-    memplugin_free(codec_delete_msg, TILER_1D_BUFFER);
-
     return;
 }
 
