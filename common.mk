@@ -45,6 +45,9 @@ EXTRA_INCVPATH += $(IPCHEADERS)/usr/include/
 # Include IPC libraries
 LIBS += memmgr mmrpc sharedmemallocatorS
 
+# Exclude Linux files for compile
+EXCLUDE_OBJS=memplugin_linux.o
+
 # Include qmacros.mk
 include $(MKFILES_ROOT)/qmacros.mk
 
