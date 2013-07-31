@@ -121,10 +121,10 @@ void memplugin_free(void *ptr, mem_type memory_type)
 EXIT:;
 }
 
-void *memplugin_share(void *ptr, mem_type memory_type)
+inline int memplugin_share(void *ptr)
 {
     /* No Userspace Virtual pointers to DMA BUF Handles conversion required*/
     /* Do nothing */
-    return (ptr);
+    return ((int)ptr);
 }
 
