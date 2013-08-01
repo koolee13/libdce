@@ -23,7 +23,7 @@ TIVIDEOTOOLSROOT	?= $(TITOOLSROOT)
 CEVERSION	?= codec_engine_3_24_00_08
 FCVERSION	?= framework_components_3_24_00_09
 XDAISVERSION	?= xdais_7_24_00_04
-XDCVERSION	?= xdctools_3_25_01_65
+XDCVERSION	?= xdctools_3_25_02_70
 IPCHEADERS	?= $(INSTALL_ROOT_nto)
 
 # Generate the full package paths for tools
