@@ -45,7 +45,7 @@ extern struct omap_device   *dev;
 void *memplugin_alloc(int sz, int height, mem_type memory_type)
 {
     MemHeader        *h;
-    struct omap_bo   *bo = omap_bo_new(dev, sz + sizeof(MemHeader), OMAP_BO_WC);
+    struct omap_bo   *bo = omap_bo_new(dev, sz + sizeof(MemHeader), OMAP_BO_CACHED);
 
     if( !bo ) {
         return (NULL);
@@ -55,6 +55,7 @@ void *memplugin_alloc(int sz, int height, mem_type memory_type)
     memset(H2P(h), 0, sz);
     h->size = sz;
     h->ptr = (void *)bo;
+    h->dma_buf_fd = 0;
 
     return (H2P(h));
 
@@ -80,7 +81,10 @@ int memplugin_share(void *ptr)
 {
     if( ptr ) {
         MemHeader   *h = P2H(ptr);
-        return (omap_bo_dmabuf((struct omap_bo *)h->ptr));
+        if( !h->dma_buf_fd ) {
+            h->dma_buf_fd = omap_bo_dmabuf((struct omap_bo *)h->ptr);
+        }
+        return (h->dma_buf_fd);
     }
     return (-1);
 }

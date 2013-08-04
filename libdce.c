@@ -111,12 +111,21 @@ static inline void Fill_MmRpc_fxnCtx(MmRpc_FxnCtx *fxnCtx, int fxn_id, int num_p
     fxnCtx->xltAry = xltAry;
 }
 
-static inline void Fill_MmRpc_fxnCtx_Ptr_Params(MmRpc_Param *mmrpc_params, int size, void *addr, void *handle)
+static inline void Fill_MmRpc_fxnCtx_OffPtr_Params(MmRpc_Param *mmrpc_params, int size, void *base, int offset, size_t handle)
+{
+    mmrpc_params->type = MmRpc_ParamType_OffPtr;
+    mmrpc_params->param.offPtr.size = (size_t)size;
+    mmrpc_params->param.offPtr.base = (size_t)base;
+    mmrpc_params->param.offPtr.offset = (size_t)offset;
+    mmrpc_params->param.offPtr.handle = handle;
+}
+
+static inline void Fill_MmRpc_fxnCtx_Ptr_Params(MmRpc_Param *mmrpc_params, int size, void *addr, size_t handle)
 {
     mmrpc_params->type = MmRpc_ParamType_Ptr;
     mmrpc_params->param.ptr.size = size;
     mmrpc_params->param.ptr.addr = (size_t)addr;
-    mmrpc_params->param.ptr.handle = (size_t)handle;
+    mmrpc_params->param.ptr.handle = handle;
 }
 
 static inline void Fill_MmRpc_fxnCtx_Scalar_Params(MmRpc_Param *mmrpc_params, int size, int data)
@@ -126,13 +135,14 @@ static inline void Fill_MmRpc_fxnCtx_Scalar_Params(MmRpc_Param *mmrpc_params, in
     mmrpc_params->param.scalar.data = (size_t)data;
 }
 
-static inline void Fill_MmRpc_fxnCtx_Xlt_Array(MmRpc_Xlt *mmrpc_xlt, int index, int32_t base, int32_t addr, void *handle)
+static inline void Fill_MmRpc_fxnCtx_Xlt_Array(MmRpc_Xlt *mmrpc_xlt, int index, int32_t base, int32_t addr, size_t handle)
 {
     /* index : index of params filled in FxnCtx                                                                                        */
     /* offset : calculated from address of index                                                                                      */
     mmrpc_xlt->index = index;
     mmrpc_xlt->offset = MmRpc_OFFSET(base, addr);
-    mmrpc_xlt->handle = (size_t)handle;
+    mmrpc_xlt->base = handle;
+    mmrpc_xlt->handle = handle;
 }
 
 /************************ FUNCTIONS **************************/
@@ -273,7 +283,8 @@ Engine_Handle Engine_open(String name, Engine_Attrs *attrs, Engine_Error *ec)
 
     /* Marshall function arguments into the send buffer */
     Fill_MmRpc_fxnCtx(&fxnCtx, DCE_RPC_ENGINE_OPEN, 1, 0, NULL);
-    Fill_MmRpc_fxnCtx_Ptr_Params(fxnCtx.params, sizeof(dce_engine_open), engine_open_msg, NULL);
+    Fill_MmRpc_fxnCtx_OffPtr_Params(fxnCtx.params, GetSz(engine_open_msg), (void *)P2H(engine_open_msg),
+                                    sizeof(MemHeader), memplugin_share(engine_open_msg));
 
     /* Invoke the Remote function through MmRpc */
     eError = MmRpc_call(MmRpcHandle, &fxnCtx, (int32_t *)(&engine_handle));
@@ -354,9 +365,10 @@ static void *create(Engine_Handle engine, String name, void *params, dce_codec_t
     Fill_MmRpc_fxnCtx(&fxnCtx, DCE_RPC_CODEC_CREATE, 4, 0, NULL);
     Fill_MmRpc_fxnCtx_Scalar_Params(&(fxnCtx.params[0]), sizeof(int32_t), codec_id);
     Fill_MmRpc_fxnCtx_Scalar_Params(&(fxnCtx.params[1]), sizeof(Engine_Handle), (int32_t)engine);
-    Fill_MmRpc_fxnCtx_Ptr_Params(&(fxnCtx.params[2]), (P2H(codec_name))->size, codec_name, NULL);
-    Fill_MmRpc_fxnCtx_Ptr_Params(&(fxnCtx.params[3]), (P2H(params))->size, params, NULL);
-
+    Fill_MmRpc_fxnCtx_OffPtr_Params(&(fxnCtx.params[2]), GetSz(codec_name), P2H(codec_name),
+                                    sizeof(MemHeader), memplugin_share(codec_name));
+    Fill_MmRpc_fxnCtx_OffPtr_Params(&(fxnCtx.params[3]), GetSz(params), P2H(params),
+                                    sizeof(MemHeader),  memplugin_share(params));
     /* Invoke the Remote function through MmRpc */
     eError = MmRpc_call(MmRpcHandle, &fxnCtx, (int32_t *)(&codec_handle));
 
@@ -398,8 +410,10 @@ static XDAS_Int32 control(void *codec, int id, void *dynParams, void *status, dc
     Fill_MmRpc_fxnCtx_Scalar_Params(&(fxnCtx.params[0]), sizeof(int32_t), codec_id);
     Fill_MmRpc_fxnCtx_Scalar_Params(&(fxnCtx.params[1]), sizeof(int32_t), (int32_t)codec);
     Fill_MmRpc_fxnCtx_Scalar_Params(&(fxnCtx.params[2]), sizeof(int32_t), (int32_t)id);
-    Fill_MmRpc_fxnCtx_Ptr_Params(&(fxnCtx.params[3]), (P2H(dynParams))->size, dynParams, NULL);
-    Fill_MmRpc_fxnCtx_Ptr_Params(&(fxnCtx.params[4]), (P2H(status))->size, status, NULL);
+    Fill_MmRpc_fxnCtx_OffPtr_Params(&(fxnCtx.params[3]), GetSz(dynParams), P2H(dynParams),
+                                    sizeof(MemHeader), memplugin_share(dynParams));
+    Fill_MmRpc_fxnCtx_OffPtr_Params(&(fxnCtx.params[4]), GetSz(status), P2H(status),
+                                    sizeof(MemHeader), memplugin_share(status));
 
     /* Invoke the Remote function through MmRpc */
     eError = MmRpc_call(MmRpcHandle, &fxnCtx, &fxnRet);
@@ -451,11 +465,13 @@ static XDAS_Int32 get_version(void *codec, void *dynParams, void *status, dce_co
     Fill_MmRpc_fxnCtx(&fxnCtx, DCE_RPC_CODEC_GET_VERSION, 4, 1, &xltAry);
     Fill_MmRpc_fxnCtx_Scalar_Params(&(fxnCtx.params[0]), sizeof(int32_t), codec_id);
     Fill_MmRpc_fxnCtx_Scalar_Params(&(fxnCtx.params[1]), sizeof(int32_t), (int32_t)codec);
-    Fill_MmRpc_fxnCtx_Ptr_Params(&(fxnCtx.params[2]), (P2H(dynParams))->size, dynParams, NULL);
-    Fill_MmRpc_fxnCtx_Ptr_Params(&(fxnCtx.params[3]), (P2H(status))->size, status, NULL);
+    Fill_MmRpc_fxnCtx_OffPtr_Params(&(fxnCtx.params[2]), GetSz(dynParams), P2H(dynParams),
+                                    sizeof(MemHeader), memplugin_share(dynParams));
+    Fill_MmRpc_fxnCtx_OffPtr_Params(&(fxnCtx.params[3]), GetSz(status), P2H(status),
+                                    sizeof(MemHeader), memplugin_share(status));
 
     /* Address Translation needed for buffer for version Info */
-    Fill_MmRpc_fxnCtx_Xlt_Array(fxnCtx.xltAry, 3, (int32_t)status, (int32_t)version_buf, NULL);
+    Fill_MmRpc_fxnCtx_Xlt_Array(fxnCtx.xltAry, 3, (int32_t)P2H(status), (int32_t)version_buf, memplugin_share(*version_buf));
 
     /* Invoke the Remote function through MmRpc */
     eError = MmRpc_call(MmRpcHandle, &fxnCtx, &fxnRet);
@@ -475,6 +491,8 @@ typedef enum process_call_params {
     OUTARGS_INDEX
 } process_call_params;
 
+#define LUMA_BUF 0
+#define CHROMA_BUF 1
 /*===============================================================*/
 /** process               : Encode/Decode process.
  *
@@ -495,8 +513,9 @@ static XDAS_Int32 process(void *codec, void *inBufs, void *outBufs,
 {
     MmRpc_FxnCtx        fxnCtx;
     MmRpc_Xlt           xltAry[MAX_TOTAl_BUF];
-    int                 fxnRet, count, total_count, numInBufs = 0, numOutBufs = 0, sz[OUTARGS_INDEX + 1] = { 0 };
+    int                 fxnRet, count, total_count, numInBufs = 0, numOutBufs = 0;
     dce_error_status    eError = DCE_EOK;
+    void             * *data_buf = NULL;
 
     _ASSERT(codec != NULL, DCE_EINVALID_INPUT);
     _ASSERT(inBufs != NULL, DCE_EINVALID_INPUT);
@@ -507,17 +526,9 @@ static XDAS_Int32 process(void *codec, void *inBufs, void *outBufs,
     if( codec_id == OMAP_DCE_VIDDEC3 ) {
         numInBufs = ((XDM2_BufDesc *)inBufs)->numBufs;
         numOutBufs = ((XDM2_BufDesc *)outBufs)->numBufs;
-        sz[INBUFS_INDEX] = sizeof(XDM2_BufDesc);
-        sz[OUTBUFS_INDEX] = sizeof(XDM2_BufDesc);
-        sz[INARGS_INDEX] = sizeof(VIDDEC3_InArgs);
-        sz[OUTARGS_INDEX] = sizeof(VIDDEC3_OutArgs);
     } else if( codec_id == OMAP_DCE_VIDENC2 ) {
         numInBufs = ((IVIDEO2_BufDesc *)inBufs)->numPlanes;
         numOutBufs = ((XDM2_BufDesc *)outBufs)->numBufs;
-        sz[INBUFS_INDEX] = sizeof(IVIDEO2_BufDesc);
-        sz[OUTBUFS_INDEX] = sizeof(XDM2_BufDesc);
-        sz[INARGS_INDEX] = sizeof(VIDENC2_InArgs);
-        sz[OUTARGS_INDEX] = sizeof(VIDENC2_OutArgs);
     }
 
     /* marshall function arguments into the send buffer                       */
@@ -525,24 +536,55 @@ static XDAS_Int32 process(void *codec, void *inBufs, void *outBufs,
     Fill_MmRpc_fxnCtx(&fxnCtx, DCE_RPC_CODEC_PROCESS, 6, numInBufs + numOutBufs, xltAry);
     Fill_MmRpc_fxnCtx_Scalar_Params(&(fxnCtx.params[CODEC_ID_INDEX]), sizeof(int32_t), codec_id);
     Fill_MmRpc_fxnCtx_Scalar_Params(&(fxnCtx.params[CODEC_HANDLE_INDEX]), sizeof(int32_t), (int32_t)codec);
-    Fill_MmRpc_fxnCtx_Ptr_Params(&(fxnCtx.params[INBUFS_INDEX]), sz[INBUFS_INDEX], inBufs, NULL);
-    Fill_MmRpc_fxnCtx_Ptr_Params(&(fxnCtx.params[OUTBUFS_INDEX]), sz[OUTBUFS_INDEX], outBufs, NULL);
-    Fill_MmRpc_fxnCtx_Ptr_Params(&(fxnCtx.params[INARGS_INDEX]), sz[INARGS_INDEX], inArgs, NULL);
-    Fill_MmRpc_fxnCtx_Ptr_Params(&(fxnCtx.params[OUTARGS_INDEX]), sz[OUTARGS_INDEX], outArgs, NULL);
+
+    Fill_MmRpc_fxnCtx_OffPtr_Params(&(fxnCtx.params[INBUFS_INDEX]), GetSz(inBufs), P2H(inBufs),
+                                    sizeof(MemHeader), memplugin_share(inBufs));
+    Fill_MmRpc_fxnCtx_OffPtr_Params(&(fxnCtx.params[OUTBUFS_INDEX]), GetSz(outBufs), P2H(outBufs),
+                                    sizeof(MemHeader), memplugin_share(outBufs));
+    Fill_MmRpc_fxnCtx_OffPtr_Params(&(fxnCtx.params[INARGS_INDEX]), GetSz(inArgs), P2H(inArgs),
+                                    sizeof(MemHeader), memplugin_share(inArgs));
+    Fill_MmRpc_fxnCtx_OffPtr_Params(&(fxnCtx.params[OUTARGS_INDEX]), GetSz(outArgs), P2H(outArgs),
+                                    sizeof(MemHeader), memplugin_share(outArgs));
 
     /* InBufs, OutBufs, InArgs, OutArgs buffer need translation but since they have been */
     /* individually mentioned as fxnCtx Params, they need not be mentioned below again */
     /* Input and Output Buffers have to be mentioned for translation                               */
     for( count = 0, total_count = 0; count < numInBufs; count++, total_count++ ) {
         if( codec_id == OMAP_DCE_VIDDEC3 ) {
-            Fill_MmRpc_fxnCtx_Xlt_Array(&(fxnCtx.xltAry[total_count]), INBUFS_INDEX, (int32_t)inBufs, (int32_t)&(((XDM2_BufDesc *)inBufs)->descs[count].buf), NULL);
+            data_buf = (void * *)(&(((XDM2_BufDesc *)inBufs)->descs[count].buf));
+            Fill_MmRpc_fxnCtx_Xlt_Array(&(fxnCtx.xltAry[total_count]), INBUFS_INDEX, (int32_t)P2H(inBufs),
+                                        (int32_t)data_buf, (size_t)*data_buf);
         } else if( codec_id == OMAP_DCE_VIDENC2 ) {
-            Fill_MmRpc_fxnCtx_Xlt_Array(&(fxnCtx.xltAry[total_count]), INBUFS_INDEX, (int32_t)inBufs, (int32_t)&(((IVIDEO2_BufDesc *)inBufs)->planeDesc[count].buf), NULL);
+            data_buf = (void * *)(&(((IVIDEO2_BufDesc *)inBufs)->planeDesc[count].buf));
+            Fill_MmRpc_fxnCtx_Xlt_Array(&(fxnCtx.xltAry[total_count]), INBUFS_INDEX, (int32_t)P2H(inBufs),
+                                        (int32_t)data_buf, (size_t)*data_buf);
         }
     }
 
     for( count = 0; count < numOutBufs; count++, total_count++ ) {
-        Fill_MmRpc_fxnCtx_Xlt_Array(&(fxnCtx.xltAry[total_count]), OUTBUFS_INDEX, (int32_t)outBufs, (int32_t)&(((XDM2_BufDesc *)outBufs)->descs[count].buf), NULL);
+        if(((XDM2_BufDesc *)outBufs)->descs[LUMA_BUF].buf != ((XDM2_BufDesc *)outBufs)->descs[CHROMA_BUF].buf ) {
+            /* MultiPlanar Buffers */
+            data_buf = (void * *)(&(((XDM2_BufDesc *)outBufs)->descs[count].buf));
+            Fill_MmRpc_fxnCtx_Xlt_Array(&(fxnCtx.xltAry[total_count]), OUTBUFS_INDEX, (int32_t)P2H(outBufs),
+                                        (int32_t)data_buf, (size_t)*data_buf);
+        }
+#if defined(BUILDOS_LINUX)
+        else {
+            /* SinglePlanar Buffers */
+            data_buf = (void * *)(&(((XDM2_BufDesc *)outBufs)->descs[count].buf));
+            Fill_MmRpc_fxnCtx_Xlt_Array(&(fxnCtx.xltAry[total_count]), OUTBUFS_INDEX, (int32_t)P2H(outBufs),
+                                        (int32_t)data_buf, (size_t)*data_buf);
+            if( count == CHROMA_BUF ) {
+                if(((XDM2_BufDesc *)outBufs)->descs[count].memType == XDM_MEMTYPE_RAW ||
+                   ((XDM2_BufDesc *)outBufs)->descs[count].memType == XDM_MEMTYPE_TILEDPAGE ) {
+                    *data_buf += ((XDM2_BufDesc *)outBufs)->descs[LUMA_BUF].bufSize.bytes;
+                } else {
+                    *data_buf += ((XDM2_BufDesc *)outBufs)->descs[LUMA_BUF].bufSize.tileMem.width *
+                                 ((XDM2_BufDesc *)outBufs)->descs[LUMA_BUF].bufSize.tileMem.height;
+                }
+            }
+        }
+#endif
     }
 
     /* Invoke the Remote function through MmRpc */
