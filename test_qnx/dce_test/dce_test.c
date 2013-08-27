@@ -531,7 +531,7 @@ int write_output(const char *pattern, int cnt, char *y, char *uv, int stride)
 /* for timing in microsecond */
 uint64_t mark_microsecond(uint64_t *last)
 {
-#if 0
+#if 1
     struct timespec    time;
     uint64_t           t1 = 0;
 
@@ -1115,6 +1115,7 @@ int main(int argc, char * *argv)
     } else {
         DEBUG("Output allocate through non-tiler");
         tiler = 0;
+
         err = output_allocate_nonTiler(outBufs, num_buffers,
                                        padded_width, padded_height, stride);
     }

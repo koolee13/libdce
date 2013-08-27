@@ -1,0 +1,38 @@
+/*
+ * $QNXLicenseC:
+ */
+
+
+%C dce test application to test libdce
+
+Syntax:
+%C [options]
+Options:
+ -h         Print out the help information
+
+Examples:
+1. decoding h.264
+   dce_test width height frames_to_write framesize inpattern outpattern codec tiler/nontiler
+   dce_test 320 240 30 framesize.txt inputfile.h264 outputfile.yuv h264 tiler
+
+2. decoding mpeg4
+   dce_test width height frames_to_write framesize inpattern outpattern codec tiler/nontiler
+   dce_test 640 480 30 framesize.txt inputfile.m4v outputfile.yuv mpeg4 nontiler
+
+3. decoding vc1ap
+   dce_test width height frames_to_write framesize inpattern outpattern codec tiler/nontiler
+   dce_test 720 480 30 framesize.txt inputfile.vc1 outputfile.yuv vc1ap tiler
+
+4. decoding vc1smp
+   dce_test width height frames_to_write framesize inpattern outpattern codec tiler/nontiler
+   dce_test 320 240 30 framesize.txt inputfile.vc1 outputfile.yuv vc1smp nontiler
+
+5. decoding mjpeg
+   dce_test width height frames_to_write framesize inpattern outpattern codec tiler/nontiler
+   dce_test 1280 720 30 framesize.txt inputfile.bin outputfile.yuv mjpeg tiler
+
+6. decoding mpeg2
+   dce_test width height frames_to_write framesize inpattern outpattern codec tiler/nontiler
+   dce_test 1920 1088 30 framesize.txt inputfile.bin outputfile.yuv mpeg2 nontiler
+
+Currently supported codecs: h264, mpeg4, vc1ap, vc1smp, mjpeg, mpeg2
