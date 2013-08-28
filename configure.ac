@@ -53,24 +53,6 @@ dnl *** checks for libraries ***
 dnl Check for libmmrpc
 PKG_CHECK_MODULES(MMRPC, libmmrpc)
 
-dnl Check for X11/libdri2
-PKG_CHECK_MODULES(X11, x11 dri2, [HAVE_X11=yes], [HAVE_X11=no])
-if test "x$HAVE_X11" = "xyes"; then
-  AC_DEFINE(HAVE_X11, 1, [Have X11 support])
-else
-  AC_MSG_WARN([Building without X11 support])
-fi
-AM_CONDITIONAL(ENABLE_X11, [test "x$HAVE_X11" = xyes])
-
-dnl Check for wayland
-PKG_CHECK_MODULES(WAYLAND, wayland-client >= 0.95.0, [HAVE_WAYLAND=yes], [HAVE_WAYLAND=no])
-if test "x$HAVE_WAYLAND" = "xyes"; then
-  AC_DEFINE(HAVE_WAYLAND, 1, [Have Wayland support])
-else
-  AC_MSG_WARN([Building without Wayland support])
-fi
-AM_CONDITIONAL(ENABLE_WAYLAND, [test "x$HAVE_WAYLAND" = xyes])
-
 dnl *** checks for header files ***
 dnl check if we have ANSI C header files
 AC_HEADER_STDC

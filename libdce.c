@@ -88,14 +88,6 @@
 
 
 #if defined(BUILDOS_LINUX)
-#ifdef HAVE_X11
-// Defined from configure.ac
-extern int dce_auth_x11(int *fd);
-#endif /* HAVE_X11 */
-#ifdef HAVE_WAYLAND   // Defined from configure.ac
-extern int dce_auth_wayland(int *fd);
-#endif /* HAVE_WAYLAND */
-
 int                     fd                 = -1;
 struct   omap_device   *dev   =  0;
 uint32_t                dce_debug          =  3;
@@ -181,28 +173,9 @@ static int dce_init(void)
 
 #if defined(BUILDOS_LINUX)
     /* Open omapdrm device */
-    int    authenticated = 0;
 
-#ifdef HAVE_X11
-    /*If X11 server is running*/
-    if( !authenticated ) {
-        int    ret = dce_auth_x11(&fd);
-        if( !ret ) {
-            authenticated = 1;
-        }
-    }
-#endif
-#ifdef HAVE_WAYLAND
-    /*If Wayland windowing is supported*/
-    if( !authenticated ) {
-        int    ret = dce_auth_wayland(&fd);
-        if( !ret ) {
-            authenticated = 1;
-        }
-    }
-#endif
-    if((fd == -1) && !authenticated ) {
-        printf("no X11/wayland, fallback to opening DRM device directly\n");
+    if(fd == -1) {
+        printf("Open omapdrm device \n");
         fd = drmOpen("omapdrm", "platform:omapdrm:00");
     }
     if( fd >= 0 ) {
