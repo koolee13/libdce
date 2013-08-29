@@ -184,7 +184,7 @@ static int dce_init(void)
 #if defined(BUILDOS_LINUX)
     /* Open omapdrm device */
 
-    if(fd == -1) {
+    if( fd == -1 ) {
         printf("Open omapdrm device \n");
         fd = drmOpen("omapdrm", "platform:omapdrm:00");
     }
@@ -471,7 +471,7 @@ static XDAS_Int32 get_version(void *codec, void *dynParams, void *status, dce_co
                                     sizeof(MemHeader), memplugin_share(status));
 
     /* Address Translation needed for buffer for version Info */
-    Fill_MmRpc_fxnCtx_Xlt_Array(fxnCtx.xltAry, 3, (int32_t)P2H(status), (int32_t)version_buf, memplugin_share(*version_buf));
+    Fill_MmRpc_fxnCtx_Xlt_Array(fxnCtx.xltAry, 3, (int32_t)status, (int32_t)version_buf, memplugin_share(*version_buf));
 
     /* Invoke the Remote function through MmRpc */
     eError = MmRpc_call(MmRpcHandle, &fxnCtx, &fxnRet);
@@ -552,11 +552,11 @@ static XDAS_Int32 process(void *codec, void *inBufs, void *outBufs,
     for( count = 0, total_count = 0; count < numInBufs; count++, total_count++ ) {
         if( codec_id == OMAP_DCE_VIDDEC3 ) {
             data_buf = (void * *)(&(((XDM2_BufDesc *)inBufs)->descs[count].buf));
-            Fill_MmRpc_fxnCtx_Xlt_Array(&(fxnCtx.xltAry[total_count]), INBUFS_INDEX, (int32_t)P2H(inBufs),
+            Fill_MmRpc_fxnCtx_Xlt_Array(&(fxnCtx.xltAry[total_count]), INBUFS_INDEX, (int32_t)inBufs,
                                         (int32_t)data_buf, (size_t)*data_buf);
         } else if( codec_id == OMAP_DCE_VIDENC2 ) {
             data_buf = (void * *)(&(((IVIDEO2_BufDesc *)inBufs)->planeDesc[count].buf));
-            Fill_MmRpc_fxnCtx_Xlt_Array(&(fxnCtx.xltAry[total_count]), INBUFS_INDEX, (int32_t)P2H(inBufs),
+            Fill_MmRpc_fxnCtx_Xlt_Array(&(fxnCtx.xltAry[total_count]), INBUFS_INDEX, (int32_t)inBufs,
                                         (int32_t)data_buf, (size_t)*data_buf);
         }
     }
@@ -565,14 +565,14 @@ static XDAS_Int32 process(void *codec, void *inBufs, void *outBufs,
         if(((XDM2_BufDesc *)outBufs)->descs[LUMA_BUF].buf != ((XDM2_BufDesc *)outBufs)->descs[CHROMA_BUF].buf ) {
             /* MultiPlanar Buffers */
             data_buf = (void * *)(&(((XDM2_BufDesc *)outBufs)->descs[count].buf));
-            Fill_MmRpc_fxnCtx_Xlt_Array(&(fxnCtx.xltAry[total_count]), OUTBUFS_INDEX, (int32_t)P2H(outBufs),
+            Fill_MmRpc_fxnCtx_Xlt_Array(&(fxnCtx.xltAry[total_count]), OUTBUFS_INDEX, (int32_t)outBufs,
                                         (int32_t)data_buf, (size_t)*data_buf);
         }
 #if defined(BUILDOS_LINUX)
         else {
             /* SinglePlanar Buffers */
             data_buf = (void * *)(&(((XDM2_BufDesc *)outBufs)->descs[count].buf));
-            Fill_MmRpc_fxnCtx_Xlt_Array(&(fxnCtx.xltAry[total_count]), OUTBUFS_INDEX, (int32_t)P2H(outBufs),
+            Fill_MmRpc_fxnCtx_Xlt_Array(&(fxnCtx.xltAry[total_count]), OUTBUFS_INDEX, (int32_t)outBufs,
                                         (int32_t)data_buf, (size_t)*data_buf);
             if( count == CHROMA_BUF ) {
                 if(((XDM2_BufDesc *)outBufs)->descs[count].memType == XDM_MEMTYPE_RAW ||
