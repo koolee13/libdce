@@ -158,6 +158,53 @@ void dce_free(void *ptr)
     memplugin_free(ptr, TILER_1D_BUFFER);
 }
 
+#if defined(BUILDOS_LINUX)
+int dce_buf_lock(int num, size_t *handle)
+{
+    int                 i;
+    MmRpc_BufDesc      *desc = NULL;
+    dce_error_status    eError = DCE_EOK;
+
+    _ASSERT(num > 0, DCE_EINVALID_INPUT);
+
+    desc = memplugin_alloc(num * sizeof(MmRpc_BufDesc), 0, TILER_1D_BUFFER);
+    _ASSERT(desc != NULL, DCE_EOUT_OF_MEMORY);
+
+    for( i = 0; i < num; i++ ) {
+        desc[i].handle = handle[i];
+    }
+
+    eError = MmRpc_use(MmRpcHandle, MmRpc_BufType_Handle, num, desc);
+
+    _ASSERT(eError == DCE_EOK, DCE_EIPC_CALL_FAIL);
+EXIT:
+    return (eError);
+}
+
+int dce_buf_unlock(int num, size_t *handle)
+{
+    int                 i;
+    MmRpc_BufDesc      *desc = NULL;
+    dce_error_status    eError = DCE_EOK;
+
+    _ASSERT(num > 0, DCE_EINVALID_INPUT);
+
+    desc = memplugin_alloc(num * sizeof(MmRpc_BufDesc), 0, TILER_1D_BUFFER);
+    _ASSERT(desc != NULL, DCE_EOUT_OF_MEMORY);
+
+    for( i = 0; i < num; i++ ) {
+        desc[i].handle = handle[i];
+    }
+
+    eError = MmRpc_release(MmRpcHandle, MmRpc_BufType_Handle, num, desc);
+
+    _ASSERT(eError == DCE_EOK, DCE_EIPC_CALL_FAIL);
+EXIT:
+    return (eError);
+}
+
+#endif /* BUILDOS_LINUX */
+
 /*************** Startup/Shutdown Functions ***********************/
 static int dce_init(void)
 {
@@ -561,16 +608,17 @@ static XDAS_Int32 process(void *codec, void *inBufs, void *outBufs,
         }
     }
 
+    /* Output Buffers */
     for( count = 0; count < numOutBufs; count++, total_count++ ) {
         if(((XDM2_BufDesc *)outBufs)->descs[LUMA_BUF].buf != ((XDM2_BufDesc *)outBufs)->descs[CHROMA_BUF].buf ) {
-            /* MultiPlanar Buffers */
+            /* Either Encode usecase or MultiPlanar Buffers for Decode usecase */
             data_buf = (void * *)(&(((XDM2_BufDesc *)outBufs)->descs[count].buf));
             Fill_MmRpc_fxnCtx_Xlt_Array(&(fxnCtx.xltAry[total_count]), OUTBUFS_INDEX, (int32_t)outBufs,
                                         (int32_t)data_buf, (size_t)*data_buf);
         }
 #if defined(BUILDOS_LINUX)
         else {
-            /* SinglePlanar Buffers */
+            /* SinglePlanar Buffers for Decode usecase*/
             data_buf = (void * *)(&(((XDM2_BufDesc *)outBufs)->descs[count].buf));
             Fill_MmRpc_fxnCtx_Xlt_Array(&(fxnCtx.xltAry[total_count]), OUTBUFS_INDEX, (int32_t)outBufs,
                                         (int32_t)data_buf, (size_t)*data_buf);

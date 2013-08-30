@@ -61,15 +61,33 @@ void dce_free(void *ptr);
 
 
 #if defined(BUILDOS_LINUX)
-void dce_set_fd(int fd);
-int dce_get_fd();
-
 /* avoid some messy stuff in xdc/std.h which leads to gcc issues */
 #define xdc__ARGTOPTR
 #define xdc__ARGTOFXN
 
-#define XDM_MEMTYPE_BO 10
-#define XDM_MEMTYPE_BO_OFFSET 11
+/*=====================================================================================*/
+/** dce_buf_lock            : Pin or lock Tiler Buffers which would be used by the codec
+ *                            as reference buffers. API is specific to GLP.
+ *
+ * @ param num    [in]      : Number of buffers to be locked.
+ * @ param handle [in]      : Pointer to array of DMA Buf FDs of the buffers to be locked.
+ * @ return                 : DCE error status is returned.
+ */
+int dce_buf_lock(int num, size_t *handle);
+
+/*=====================================================================================*/
+/** dce_buf_unlock          : Unpin or unlock Tiler Buffers which were locked to be used
+ *                            by the codec as reference buffers. API is specific to GLP.
+ *
+ * @ param num    [in]      : Number of buffers to be locked.
+ * @ param handle [in]      : Pointer to array of DMA Buf FDs of the buffers to be locked.
+ * @ return                 : DCE error status is returned.
+ */
+int dce_buf_unlock(int num, size_t *handle);
+
+void dce_set_fd(int fd);
+int dce_get_fd();
+
 #endif /* BUILDOS_LINUX */
 
 #endif /* __LIBDCE_H__ */
