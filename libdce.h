@@ -38,6 +38,12 @@
 #include <ti/sdo/ce/video3/viddec3.h>
 #include <ti/sdo/ce/video2/videnc2.h>
 
+#if defined(BUILDOS_LINUX)
+/* avoid some messy stuff in xdc/std.h which leads to gcc issues */
+#define xdc__ARGTOPTR
+#define xdc__ARGTOFXN
+#endif /* BUILDOS_LINUX */
+
 
 /* DCE Error Types */
 typedef enum dce_error_status {
@@ -60,11 +66,23 @@ void *dce_alloc(int sz);
 void dce_free(void *ptr);
 
 
-#if defined(BUILDOS_LINUX)
-/* avoid some messy stuff in xdc/std.h which leads to gcc issues */
-#define xdc__ARGTOPTR
-#define xdc__ARGTOFXN
+/*********************************** APIs for Linux ***********************************/
+/************************ Initialization/Deinitialization APIs ************************/
+/*=====================================================================================*/
+/** dce_init                : Initialize DCE. Only Linux applications are expected to call.
+ *
+ * @ return                 : Pointer to omap_device structure.
+ */
+void *dce_init(void);
 
+/*===============================================================*/
+/** dce_deinit              : Deinitialize DCE. Only Linux applications are expected to call.
+ *
+ * @ param dev    [in]      : Pointer to omap_device structure.
+ */
+void dce_deinit(void *dev);
+
+/************************ Input/Output Buffer Lock/Unlock APIs ************************/
 /*=====================================================================================*/
 /** dce_buf_lock            : Pin or lock Tiler Buffers which would be used by the codec
  *                            as reference buffers. API is specific to GLP.
@@ -85,10 +103,11 @@ int dce_buf_lock(int num, size_t *handle);
  */
 int dce_buf_unlock(int num, size_t *handle);
 
-void dce_set_fd(int fd);
+/******************************* OMAPDRM Get/Set FD APIs *******************************/
 int dce_get_fd();
 
-#endif /* BUILDOS_LINUX */
+void dce_set_fd(int fd);
+
 
 #endif /* __LIBDCE_H__ */
 

@@ -88,9 +88,7 @@
 
 
 #if defined(BUILDOS_LINUX)
-int                     fd                 = -1;
-struct   omap_device   *dev   =  0;
-uint32_t                dce_debug          =  3;
+int    fd  = -1;
 #endif /* BUILDOS_LINUX */
 
 
@@ -146,8 +144,8 @@ static inline void Fill_MmRpc_fxnCtx_Xlt_Array(MmRpc_Xlt *mmrpc_xlt, int index, 
 }
 
 /************************ FUNCTIONS **************************/
-/* Interface for QNX for parameter buffer allocation                                */
-/* These interfaces are implemented to maintain Backward Compatability */
+/* Interface for QNX for parameter buffer allocation                                      */
+/* These interfaces are implemented to maintain Backward Compatability          */
 void *dce_alloc(int sz)
 {
     return (memplugin_alloc(sz, 0, TILER_1D_BUFFER));
@@ -158,7 +156,41 @@ void dce_free(void *ptr)
     memplugin_free(ptr, TILER_1D_BUFFER);
 }
 
+/***************** FUNCTIONS SPECIFIC TO LINUX *******************/
 #if defined(BUILDOS_LINUX)
+void *dce_init(void)
+{
+    struct omap_device   *OmapDev = NULL;
+    dce_error_status      eError = DCE_EOK;
+
+    printf(" >> dce_init\n");
+
+    /* Open omapdrm device */
+    if( fd == -1 ) {
+        printf("Open omapdrm device \n");
+        fd = drmOpen("omapdrm", "platform:omapdrm:00");
+    }
+    if( fd >= 0 ) {
+        OmapDev = omap_device_new(fd);
+    } else {
+        printf("Error opening omapdrm : drmOpen failed");
+        goto EXIT;
+    }
+
+EXIT:
+    return ((void *)OmapDev);
+}
+
+void dce_deinit(void *dev)
+{
+    omap_device_del(dev);
+    dev = NULL;
+    close(fd);
+    fd = -1;
+
+    return;
+}
+
 int dce_buf_lock(int num, size_t *handle)
 {
     int                 i;
@@ -203,15 +235,30 @@ EXIT:
     return (eError);
 }
 
+/* Incase of X11 or Wayland the fd can be shared to libdce using this call */
+void dce_set_fd(int dce_fd)
+{
+    fd = dce_fd;
+}
+
+int dce_get_fd(void)
+{
+    return (fd);
+}
+
 #endif /* BUILDOS_LINUX */
 
-/*************** Startup/Shutdown Functions ***********************/
-static int dce_init(void)
+/*=====================================================================================*/
+/** dce_ipc_init            : Initialize MmRpc. This function is called within Engine_open().
+ *
+ * @ return                 : Error Status.
+ */
+static int dce_ipc_init(void)
 {
-    dce_error_status    eError = DCE_EOK;
     MmRpc_Params        args;
+    dce_error_status    eError = DCE_EOK;
 
-    printf(" >> dce_init\n");
+    printf(" >> dce_ipc_init\n");
 
     pthread_mutex_lock(&mutex);
 
@@ -228,28 +275,16 @@ static int dce_init(void)
 
     printf("open(/dev/" DCE_DEVICE_NAME ") -> 0x%x\n", (int)MmRpcHandle);
 
-#if defined(BUILDOS_LINUX)
-    /* Open omapdrm device */
-
-    if( fd == -1 ) {
-        printf("Open omapdrm device \n");
-        fd = drmOpen("omapdrm", "platform:omapdrm:00");
-    }
-    if( fd >= 0 ) {
-        dev = omap_device_new(fd);
-    } else {
-        printf("Error opening omapdrm : drmOpen failed");
-        goto EXIT;
-    }
-#endif /* BUILDOS_LINUX */
-
-
 EXIT:
     pthread_mutex_unlock(&mutex);
     return (eError);
 }
 
-static void dce_deinit(void)
+/*=====================================================================================*/
+/** dce_ipc_deinit            : DeInitialize MmRpc. This function is called within
+ *                              Engine_close().
+ */
+static void dce_ipc_deinit()
 {
     pthread_mutex_lock(&mutex);
 
@@ -263,32 +298,10 @@ static void dce_deinit(void)
     }
     MmRpcHandle = NULL;
 
-#if defined(BUILDOS_LINUX)
-    omap_device_del(dev);
-    dev = NULL;
-    close(fd);
-    fd = -1;
-#endif /* BUILDOS_LINUX */
-
-
 EXIT:
     pthread_mutex_unlock(&mutex);
     return;
 }
-
-/* Incase of X11 or Wayland the fd can be shared to libdce using this call */
-#if defined(BUILDOS_LINUX)
-void dce_set_fd(int dce_fd)
-{
-    fd = dce_fd;
-}
-
-int dce_get_fd(void)
-{
-    return (fd);
-}
-
-#endif /* BUILDOS_LINUX */
 
 /*===============================================================*/
 /** Engine_open        : Open Codec Engine.
@@ -309,8 +322,8 @@ Engine_Handle Engine_open(String name, Engine_Attrs *attrs, Engine_Error *ec)
 
     _ASSERT(name != '\0', DCE_EINVALID_INPUT);
 
-    /* Initialize DCE and IPC. In case of Error Deinitialize them */
-    _ASSERT_AND_EXECUTE(dce_init() == DCE_EOK, DCE_EIPC_CREATE_FAIL, dce_deinit());
+    /* Initialize IPC. In case of Error Deinitialize them */
+    _ASSERT_AND_EXECUTE(dce_ipc_init() == DCE_EOK, DCE_EIPC_CREATE_FAIL, dce_ipc_deinit());
 
     printf(">> Engine_open Params::name = %s size = %d\n", name, strlen(name));
     /* Allocate Shared memory for the engine_open rpc msg structure*/
@@ -373,7 +386,7 @@ Void Engine_close(Engine_Handle engine)
     _ASSERT(eError == DCE_EOK, DCE_EIPC_CALL_FAIL);
 
 EXIT:
-    dce_deinit();
+    dce_ipc_deinit();
     return;
 }
 
