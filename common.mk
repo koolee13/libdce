@@ -15,27 +15,14 @@ CCFLAGS+=-O2 -Dxdc_target_types__=qnx/targets/arm/std.h -DBUILDOS_QNX=1
 # To get final library name as "libdce". Needed as project name is not dce
 NAME=dce
 
-### Add files to be included for Build
-TITOOLSROOT	?= /usr/local
-TIVIDEOTOOLSROOT	?= $(TITOOLSROOT)
-# Different tool versions can easily be programmed by defining below variables
-# in your environment.
-CEVERSION	?= codec_engine_3_24_00_08
-FCVERSION	?= framework_components_3_24_00_09
-XDAISVERSION	?= xdais_7_24_00_04
-XDCVERSION	?= xdctools_3_25_02_70
+# Path to IPC Header files
 IPCHEADERS	?= $(INSTALL_ROOT_nto)
 
-# Generate the full package paths for tools
-CEPROD		= $(TIVIDEOTOOLSROOT)/$(CEVERSION)
-FCPROD		= $(TIVIDEOTOOLSROOT)/$(FCVERSION)
-XDAISPROD	= $(TITOOLSROOT)/$(XDAISVERSION)
-XDCPROD	    = $(TITOOLSROOT)/$(XDCVERSION)
+EXTRA_INCVPATH += $(PROJECT_ROOT)/packages/codec_engine
+EXTRA_INCVPATH += $(PROJECT_ROOT)/packages/ivahd_codecs
+EXTRA_INCVPATH += $(PROJECT_ROOT)/packages/xdais
+EXTRA_INCVPATH += $(PROJECT_ROOT)/packages/xdctools
 
-EXTRA_INCVPATH += $(CEPROD)/packages
-EXTRA_INCVPATH += $(FCPROD)/packages
-EXTRA_INCVPATH += $(XDAISPROD)/packages
-EXTRA_INCVPATH += $(XDCPROD)/packages
 EXTRA_INCVPATH += $(IPCHEADERS)/usr/include/memmgr
 EXTRA_INCVPATH += $(IPCHEADERS)/usr/include/ti/syslink/
 EXTRA_INCVPATH += $(IPCHEADERS)/usr/include/ti/ipc/mm
