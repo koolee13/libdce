@@ -33,7 +33,7 @@
 #ifndef __LIBDCE_H__
 #define __LIBDCE_H__
 
-
+#include <xdc/std.h>
 #include <ti/sdo/ce/Engine.h>
 #include <ti/sdo/ce/video3/viddec3.h>
 #include <ti/sdo/ce/video2/videnc2.h>
@@ -44,8 +44,7 @@
 #define xdc__ARGTOFXN
 #endif /* BUILDOS_LINUX */
 
-
-/* DCE Error Types */
+/********************************** DCE Error Types **********************************/
 typedef enum dce_error_status {
     DCE_EOK = 0,
     DCE_EXDM_FAIL = -1,
@@ -58,13 +57,22 @@ typedef enum dce_error_status {
     DCE_ESEMAPHORE_FAIL = -8
 } dce_error_status;
 
-
-/* other than the codec-engine API, you must use the following two functions
- * to allocate the data structures passed to codec-engine APIs (other than the
- * raw input/output buffers which should be passed as virtual addresses in
- * TILER space
+/***************************** Memory Allocation/Free APIs *****************************/
+/*=====================================================================================*/
+/** dce_alloc               : Allocate the Data structures passed to codec-engine APIs
+ *                             except Input/Output buffers.
+ *
+ * @ param sz    [in]       : Size of memory to be allocated.
+ * @ return                 : Pointer to allocated memory.
  */
 void *dce_alloc(int sz);
+
+/*=====================================================================================*/
+/** dce_free                : Free the Data structures passed to codec-engine APIs
+ *                             except Input/Output buffers.
+ *
+ * @ param ptr   [in]       : Pointer to allocated memory.
+ */
 void dce_free(void *ptr);
 
 
@@ -106,8 +114,18 @@ int dce_buf_lock(int num, size_t *handle);
 int dce_buf_unlock(int num, size_t *handle);
 
 /******************************* OMAPDRM Get/Set FD APIs *******************************/
+/*=====================================================================================*/
+/** dce_get_fd              : Get OMAP DRM File Descriptor.
+ *
+ * @ return                 : OMAP DRM File Descriptor.
+ */
 int dce_get_fd();
 
+/*=====================================================================================*/
+/** dce_set_fd              : Set OMAP DRM File Descriptor.
+ *
+ * @ param fd     [in]      : OMAP DRM File Descriptor.
+ */
 void dce_set_fd(int fd);
 
 
