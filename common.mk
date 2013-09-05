@@ -22,6 +22,7 @@ EXTRA_INCVPATH += $(PROJECT_ROOT)/packages/codec_engine
 EXTRA_INCVPATH += $(PROJECT_ROOT)/packages/ivahd_codecs
 EXTRA_INCVPATH += $(PROJECT_ROOT)/packages/xdais
 EXTRA_INCVPATH += $(PROJECT_ROOT)/packages/xdctools
+EXTRA_INCVPATH += $(PROJECT_ROOT)/packages/framework_components
 
 EXTRA_INCVPATH += $(IPCHEADERS)/usr/include/memmgr
 EXTRA_INCVPATH += $(IPCHEADERS)/usr/include/ti/syslink/
