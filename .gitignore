@@ -32,3 +32,6 @@ platform/ti/dce/baseimage/package/
 src/ti/framework/dce/lib/
 src/ti/framework/dce/package/
 *.pinfo
+nto
+test_qnx/dce_enc_test/arm
+test_qnx/dce_test/arm
