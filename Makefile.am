@@ -16,7 +16,8 @@ CE_CFLAGS                    = \
                                -I$(top_srcdir)/packages/xdais \
                                -I$(top_srcdir)/packages/xdctools \
                                -I$(IPC_HEADERS)/ \
-			       -DBUILDOS_LINUX=1 \
+			       -DBUILDOS_LINUX=1 -DDCE_DEBUG_LEVEL=1 \
+			       -DDCE_DEBUG_ENABLE=1 \
                                -Wno-pointer-to-int-cast
 
 

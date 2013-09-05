@@ -33,28 +33,36 @@
 #ifndef __DCE_PRIV_H__
 #define __DCE_PRIV_H__
 
-
-#ifdef BUILDOS_QNX
-#include <sys/slog.h>
-
+extern int dce_debug;
 
 /********************* MACROS ************************/
 /***************** TRACE MACROS  *********************/
 /* Need to make it OS specific and support different trace levels */
-#define ERROR(FMT, ...)  do { \
-        slogf(42, _SLOG_INFO, "%s:%d:\t%s\terror: " FMT, __FILE__, __LINE__, __FUNCTION__, ##__VA_ARGS__); \
-} while( 0 )
-#define DEBUG(FMT, ...)  do { \
-        slogf(42, _SLOG_DEBUG2, "%s:%d:\t%s\tdebug: " FMT, __FILE__, __LINE__, __FUNCTION__, ##__VA_ARGS__); \
-} while( 0 )
+
+/* set desired trace level:
+ *   1 - error
+ *   2 - error, debug
+ *   3 - error, debug, info  (very verbose)
+ */
+#ifdef DCE_DEBUG_ENABLE
+#define ERROR(FMT,...)   TRACE(1, "ERROR: " FMT, ##__VA_ARGS__)
+#define DEBUG(FMT,...)   TRACE(2, "DEBUG: " FMT, ##__VA_ARGS__)
+#define INFO(FMT,...)    TRACE(3, "INFO: " FMT, ##__VA_ARGS__)
+#else
+#define ERROR(FMT,...)
+#define DEBUG(FMT,...)
+#define INFO(FMT,...)
 #endif
 
-#ifdef BUILDOS_LINUX
-#define ERROR(FMT, ...) do { \
-	printf("%s:%d:\t%s\t Error: "FMT,__FILE__, __LINE__,__FUNCTION__ ,##__VA_ARGS__); \
-}while( 0 )
-#define DEBUG(FMT, ...) do { \
-	printf("%s:%d:\t%s\t Debug: "FMT,__FILE__, __LINE__,__FUNCTION__ ,##__VA_ARGS__); \
+#ifdef BUILDOS_QNX
+#include <sys/slog.h>
+#define TRACE(lvl,FMT, ...)  do if ((lvl) <= dce_debug) { \
+        slogf(42, _SLOG_INFO, "%s:%d:\t%s\terror: " FMT, __FILE__, __LINE__, __FUNCTION__, ##__VA_ARGS__); \
+} while( 0 )
+
+#elif defined BUILDOS_LINUX
+#define TRACE(lvl,FMT, ...)  do if ((lvl) <= dce_debug) { \
+        printf("%s:%d:\t%s\t Error: "FMT,__FILE__, __LINE__,__FUNCTION__ ,##__VA_ARGS__); \
 }while( 0 )
 #endif
 

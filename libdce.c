@@ -86,7 +86,7 @@
 MmRpc_Handle    MmRpcHandle = NULL;
 sem_t          *dce_semaphore = NULL;
 static int      count = 0;
-
+int             dce_debug = DCE_DEBUG_LEVEL;
 
 /****************** INLINE FUNCTIONS ********************/
 
