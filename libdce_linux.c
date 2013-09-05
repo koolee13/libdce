@@ -33,7 +33,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
-#include <xdc/std.h>
 
 #include <xf86drm.h>
 #include <omap_drm.h>
@@ -41,15 +40,18 @@
 
 #include <MmRpc.h>
 #include "dce_priv.h"
+#include "libdce.h"
+#include "memplugin.h"
 
 #define INVALID_DRM_FD (-1)
 
-int    OmapDrm_FD = INVALID_DRM_FD;
+int                    OmapDrm_FD  = INVALID_DRM_FD;
+struct omap_device    *OmapDev     = NULL;
+extern MmRpc_Handle    MmRpcHandle;
 
 void *dce_init(void)
 {
-    struct omap_device   *OmapDev = NULL;
-    dce_error_status      eError = DCE_EOK;
+    dce_error_status    eError = DCE_EOK;
 
     printf(" >> dce_init\n");
 

@@ -83,9 +83,9 @@
 
 /********************* GLOBALS ***********************/
 /* Hande used for Remote Communication                               */
-static MmRpc_Handle    MmRpcHandle = NULL;
-sem_t                 *dce_semaphore = NULL;
-static int             count = 0;
+MmRpc_Handle    MmRpcHandle = NULL;
+sem_t          *dce_semaphore = NULL;
+static int      count = 0;
 
 
 /****************** INLINE FUNCTIONS ********************/

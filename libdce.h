@@ -33,6 +33,7 @@
 #ifndef __LIBDCE_H__
 #define __LIBDCE_H__
 
+#define xdc_target_types__ gnu/targets/std.h
 #include <xdc/std.h>
 #include <ti/sdo/ce/Engine.h>
 #include <ti/sdo/ce/video3/viddec3.h>

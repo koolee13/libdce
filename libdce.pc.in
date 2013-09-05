@@ -8,4 +8,4 @@ Description: distributed codec-engine
 Version: @VERSION@
 Requires: libdrm libdrm_omap
 Libs: -L${libdir} -ldce
-Cflags: -I${includedir}/
+Cflags: -I${includedir}/dce

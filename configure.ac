@@ -51,7 +51,7 @@ PKG_CHECK_MODULES(DRM, libdrm libdrm_omap)
 
 dnl *** checks for libraries ***
 dnl Check for libmmrpc
-PKG_CHECK_MODULES(MMRPC, libmmrpc)
+#PKG_CHECK_MODULES(MMRPC, libmmrpc)
 
 dnl *** checks for header files ***
 dnl check if we have ANSI C header files
@@ -69,62 +69,19 @@ dnl *** checks for dependancy libraries ***
 
 dnl *** set variables based on configure arguments ***
 
-
-if test "$CODEC_ENGINE" != "" ; then
-	AC_MSG_NOTICE([Checking component : CODEC_ENGINE])
-	AC_CHECK_FILES(["$CODEC_ENGINE"],,[AC_MSG_ERROR(["$CODEC_ENGINE" not found Set path variable CODEC_ENGINE])])
-	AC_SUBST(CODEC_ENGINE)
+if test "$IPC_HEADERS" != "" ; then
+        AC_CHECK_FILES(["$IPC_HEADERS"],,[AC_MSG_ERROR(["$IPC_HEADERS" not found, Set path variable IPC_HEADERS])])
+        AC_SUBST(IPC_HEADERS)
 else
-	AC_MSG_ERROR([Set path variable CODEC_ENGINE])
+        AC_MSG_ERROR([Set path variable IPC_HEADERS])
 fi
-
-if test "$FRAMEWORK_COMPONENTS" != "" ; then
-	AC_MSG_NOTICE([Checking component : FRAMEWORK_COMPONENTS])
-        AC_CHECK_FILES(["$FRAMEWORK_COMPONENTS"],,[AC_MSG_ERROR(["$FRAMEWORK_COMPONENTS" not found Set path variable FRAMEWORK_COMPONENTS])])
-	AC_SUBST(FRAMEWORK_COMPONENTS)
-else
-        AC_MSG_ERROR([Set path variable FRAMEWORK_COMPONENTS])
-fi
-
-if test "$IVAHD_CODECS" != "" ; then
-	AC_MSG_NOTICE([Checking component : IVAHD_CODECS])
-        AC_CHECK_FILES(["$IVAHD_CODECS"],,[AC_MSG_ERROR(["$IVAHD_CODECS" not fou nd Set path variable IVAHD_CODECS])])
-	AC_SUBST(IVAHD_CODECS)
-else
-        AC_MSG_ERROR([Set path variable IVAHD_CODECS])
-fi
-
-if test "$XDAIAS" != "" ; then
-	AC_MSG_NOTICE([Checking component : XDAIAS])
-        AC_CHECK_FILES(["$XDAIAS"],,[AC_MSG_ERROR(["$XDAIAS" not found Set path variable XDAIAS])])
-	AC_SUBST(XDAIAS)
-else
-        AC_MSG_ERROR([Set path variable XDAIAS])
-fi
-
-if test "$XDCTOOLS" != "" ; then
-        AC_MSG_NOTICE([Checking component : XDCTOOLS])
-        AC_CHECK_FILES(["$XDCTOOLS"],,[AC_MSG_ERROR(["$XDCTOOLS" not found Set path variable XDCTOOLS])])
-	AC_SUBST(XDCTOOLS)
-else
-        AC_MSG_ERROR([Set path variable XDCTOOLS])
-fi
-
-if test "$IPC" != "" ; then
-        AC_MSG_NOTICE([Checking component : IPC])
-        AC_CHECK_FILES(["$IPC"],,[AC_MSG_ERROR(["$IPC" not found Set path variable IPC])])
-        AC_SUBST(IPC)
-else
-        AC_MSG_ERROR([Set path variable IPC])
-fi
-
-
-
-
-
 
 AC_CONFIG_FILES([
 libdce.pc
 Makefile
+packages/codec_engine/Makefile
+packages/ivahd_codecs/Makefile
+packages/xdais/Makefile
+packages/xdctools/Makefile
 ])
 AC_OUTPUT
