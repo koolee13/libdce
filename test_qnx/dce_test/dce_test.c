@@ -30,7 +30,6 @@
  * EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <xdc/std.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -43,9 +42,10 @@
 #include <time.h>
 #include <sys/mman.h>
 
+#include "libdce.h"
+
 #include <tilermem.h>
 #include <memmgr.h>
-#include <xdc/std.h>
 #include <ti/sdo/ce/Engine.h>
 #include <ti/sdo/ce/video3/viddec3.h>
 #include <ti/sdo/codecs/h264vdec/ih264vdec.h>
@@ -55,7 +55,6 @@
 #include <ti/sdo/codecs/mpeg2vdec/impeg2vdec.h>
 
 #include "ti/shmemallocator/SharedMemoryAllocatorUsr.h"
-#include "libdce.h"
 
 #define OMAP5
 

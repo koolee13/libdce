@@ -10,7 +10,7 @@ include $(QCONFIG)
 #### Overriding qrules.mk macros before including qtargets.mk
 
 # Flags to add to the C compiler command line
-CCFLAGS+=-O2 -Dxdc_target_types__=qnx/targets/arm/std.h -DBUILDOS_QNX=1
+CCFLAGS+=-O2 -DBUILDOS_QNX=1 -DDCE_DEBUG_ENABLE=1 -DDCE_DEBUG_LEVEL=1
 
 # To get final library name as "libdce". Needed as project name is not dce
 NAME=dce

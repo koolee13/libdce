@@ -29,7 +29,6 @@
  * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
  * EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-#include <xdc/std.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -42,15 +41,15 @@
 #include <time.h>
 #include <sys/mman.h>
 
+#include "libdce.h"
+
 #include <tilermem.h>
 #include <memmgr.h>
-#include <xdc/std.h>
 #include <ti/sdo/ce/Engine.h>
 #include <ti/sdo/ce/video2/videnc2.h>
 #include <ti/sdo/codecs/h264enc/ih264enc.h>
 #include <ti/sdo/codecs/mpeg4enc/impeg4enc.h>
 
-#include "libdce.h"
 
 #define OMAP5
 
