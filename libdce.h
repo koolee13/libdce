@@ -53,7 +53,8 @@ typedef enum dce_error_status {
     DCE_EXDM_UNSUPPORTED = -3,
     DCE_EIPC_CREATE_FAIL = -4,
     DCE_EIPC_CALL_FAIL = -5,
-    DCE_EINVALID_INPUT = -6
+    DCE_EINVALID_INPUT = -6,
+    DCE_EOMAPDRM_FAIL = -7
 } dce_error_status;
 
 

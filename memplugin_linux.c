@@ -33,7 +33,7 @@
 #include "memplugin.h"
 #include "dce_priv.h"
 
-extern struct omap_device   *dev;
+extern struct omap_device   *OmapDev;
 
 
 /*  memplugin_alloc - allocates omap_bo buffer with a header above it.
@@ -45,7 +45,7 @@ extern struct omap_device   *dev;
 void *memplugin_alloc(int sz, int height, mem_type memory_type)
 {
     MemHeader        *h;
-    struct omap_bo   *bo = omap_bo_new(dev, sz + sizeof(MemHeader), OMAP_BO_CACHED);
+    struct omap_bo   *bo = omap_bo_new(OmapDev, sz + sizeof(MemHeader), OMAP_BO_CACHED);
 
     if( !bo ) {
         return (NULL);

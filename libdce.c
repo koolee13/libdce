@@ -71,12 +71,6 @@
 
 #include <xdc/std.h>
 
-#if defined(BUILDOS_LINUX)
-#include <xf86drm.h>
-#include <omap_drm.h>
-#include <omap_drmif.h>
-#endif /* BUILDOS_LINUX */
-
 /* IPC Headers */
 #include <MmRpc.h>
 
@@ -85,11 +79,6 @@
 #include "dce_rpc.h"
 #include "dce_priv.h"
 #include "memplugin.h"
-
-
-#if defined(BUILDOS_LINUX)
-int    fd  = -1;
-#endif /* BUILDOS_LINUX */
 
 
 /********************* GLOBALS ***********************/
@@ -155,98 +144,6 @@ void dce_free(void *ptr)
 {
     memplugin_free(ptr, TILER_1D_BUFFER);
 }
-
-/***************** FUNCTIONS SPECIFIC TO LINUX *******************/
-#if defined(BUILDOS_LINUX)
-void *dce_init(void)
-{
-    struct omap_device   *OmapDev = NULL;
-    dce_error_status      eError = DCE_EOK;
-
-    printf(" >> dce_init\n");
-
-    /* Open omapdrm device */
-    if( fd == -1 ) {
-        printf("Open omapdrm device \n");
-        fd = drmOpen("omapdrm", "platform:omapdrm:00");
-    }
-    if( fd >= 0 ) {
-        OmapDev = omap_device_new(fd);
-    } else {
-        printf("Error opening omapdrm : drmOpen failed");
-        goto EXIT;
-    }
-
-EXIT:
-    return ((void *)OmapDev);
-}
-
-void dce_deinit(void *dev)
-{
-    omap_device_del(dev);
-    dev = NULL;
-    close(fd);
-    fd = -1;
-
-    return;
-}
-
-int dce_buf_lock(int num, size_t *handle)
-{
-    int                 i;
-    MmRpc_BufDesc      *desc = NULL;
-    dce_error_status    eError = DCE_EOK;
-
-    _ASSERT(num > 0, DCE_EINVALID_INPUT);
-
-    desc = memplugin_alloc(num * sizeof(MmRpc_BufDesc), 0, TILER_1D_BUFFER);
-    _ASSERT(desc != NULL, DCE_EOUT_OF_MEMORY);
-
-    for( i = 0; i < num; i++ ) {
-        desc[i].handle = handle[i];
-    }
-
-    eError = MmRpc_use(MmRpcHandle, MmRpc_BufType_Handle, num, desc);
-
-    _ASSERT(eError == DCE_EOK, DCE_EIPC_CALL_FAIL);
-EXIT:
-    return (eError);
-}
-
-int dce_buf_unlock(int num, size_t *handle)
-{
-    int                 i;
-    MmRpc_BufDesc      *desc = NULL;
-    dce_error_status    eError = DCE_EOK;
-
-    _ASSERT(num > 0, DCE_EINVALID_INPUT);
-
-    desc = memplugin_alloc(num * sizeof(MmRpc_BufDesc), 0, TILER_1D_BUFFER);
-    _ASSERT(desc != NULL, DCE_EOUT_OF_MEMORY);
-
-    for( i = 0; i < num; i++ ) {
-        desc[i].handle = handle[i];
-    }
-
-    eError = MmRpc_release(MmRpcHandle, MmRpc_BufType_Handle, num, desc);
-
-    _ASSERT(eError == DCE_EOK, DCE_EIPC_CALL_FAIL);
-EXIT:
-    return (eError);
-}
-
-/* Incase of X11 or Wayland the fd can be shared to libdce using this call */
-void dce_set_fd(int dce_fd)
-{
-    fd = dce_fd;
-}
-
-int dce_get_fd(void)
-{
-    return (fd);
-}
-
-#endif /* BUILDOS_LINUX */
 
 /*=====================================================================================*/
 /** dce_ipc_init            : Initialize MmRpc. This function is called within Engine_open().
