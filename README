@@ -1,6 +1,26 @@
-************** LIBDCE Build **************
+****************************** LIBDCE README ******************************
 
-## For QNX ##
+The libDCE component provides an interface for applications running on the
+MPU (HLOS) to invoke the Codec Engine APIs on the remote core (IPU). It
+enables the Video Encode/Decode Usecases. Apart from the exposed CE APIs,
+it provides a memplugin utility to allocate memory that can be read/written
+from the remote IPU core.
+
+This ReadMe file comprises:
+1. LibDCE Build Information
+   a. For QNX
+   b. For Linux
+   c. For Android
+2. Supported API information
+   a. Codec Engine APIs
+   b. libDCE APIs
+3. API call flow
+   a. Decoder Application
+4. Version Info of Headers included in packages folder
+
+****************************** BUILD INFO *****************************
+
+########################### For QNX ###########################
 
 Exporting QNX variables:
 export QNX_ROOT=/opt/qnx650
@@ -14,19 +34,20 @@ export PATH=${QNX_HOST}/usr/bin:${PATH}:${QNX_CONFIGURATION}/bin
 export QNX_USERNAME=<registered email-id at QNX> //not important
 eval `qconfig -n "QNX Software Development Platform 6.5.0" -e`
 
-If previous eval doesn't work, that is it doesn't output:
+If previous eval doesn't work, that is it doesn't output the following:
 "
 export QNX_HOST="/opt/qnx650/host/linux/x86";
 export QNX_TARGET="/opt/qnx650/target/qnx6";
 export PATH="/opt/qnx650/host/linux/x86/usr/bin:/opt/qnx650/host/linux/x86/bin:/opt/qnx650/host/
-             linux/x86/sbin:/opt/qnx650/host/linux/x86/usr/sbin:/opt/qnx650/host/linux/x86/usr/photon/appbuilder:
-             /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/etc/qnx/bin:/etc/qnx/bin:
-             /opt/qnx650:/etc/qnx/bin:/etc/qnx/bin:/etc/qnx/bin:/etc/qnx/bin";
+linux/x86/sbin:/opt/qnx650/host/linux/x86/usr/sbin:/opt/qnx650/host/linux/x86/usr/photon/appbuilder:
+/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/etc/qnx/bin:/etc/qnx/bin:
+/opt/qnx650:/etc/qnx/bin:/etc/qnx/bin:/etc/qnx/bin:/etc/qnx/bin";
 export LD_LIBRARY_PATH="/opt/qnx650/host/linux/x86/usr/lib";
 export MAKEFLAGS="-I/opt/qnx650/target/qnx6/usr/include";
 "
 
-then try : /opt/qnx650/host/linux/x86/usr/bin/qconfig -n "QNX Software Development Platform 6.5.0" -e
+then try:
+/opt/qnx650/host/linux/x86/usr/bin/qconfig -n "QNX Software Development Platform 6.5.0" -e
 
 Exporting LIBDCE variables:
 export IPCHEADERS=<path to IPC Headers>
@@ -53,7 +74,407 @@ INSTALL_ROOT/armle-v7/bin/dce_test
 INSTALL_ROOT/armle-v7/bin/dce_enc_test
 
 
-**** Version Info of Headers included in packages folder ****
+########################## For Linux ##########################
+
+Exporting LIBDCE variables:
+export IPC_HEADERS=<path to IPC Headers> (MmRpc.h)
+
+Building:
+
+	user@target:~/libdce# ./autogen.sh --prefix=/usr
+	This will check for required packages, compiler,
+	headers and generates the Makefile. --prefix=/usr
+	will confirure the install directory to /usr
+
+	user@target:~/libdce# make
+	Running make will build the library. It generates
+	the shared objects, static library, libdce.la
+	file for linking (Used by libtool) and
+	libdce.pc used for querying using pkg-config.
+
+	user@target:~/libdce# make install
+	Installs the library files(libdce.so*, libdce.a,
+	libdce.la) to $(--prefix)/lib.
+	Installs libdce.pc to $(--prefix)/lib/pkgconfig
+	Installs libdce.h and required headers to
+	$(--prefix)/include/dce/
+
+Clean:
+
+	user@target:~/libdce# make clean
+	This will clean the build. Run make to build.
+	user@target:~/libdce# make distclean
+	This will clean the build and remove Makefiles.
+	Follow build steps above to build again.
+
+######################### For Android #########################
+
+
+
+
+
+
+******************************* API DETAILS *******************************
+
+######################### Codec Engine APIs #########################
+
+/*==================================================================*/
+/** Engine_open        : Codec Engine Exposed API to open
+ *                       Codec Engine.
+ * @ param name  [in]  : Name of Encoder or Decoder codec.
+ * @ param attrs [in]  : Pointer to Engine Attributes structure.
+                         NULL is valid.
+ * @ param ec    [out] : Pointer to Engine Error structure for Codec
+ *                       to write error code. NULL is valid.
+ * @ return            : Codec Engine Handle is returned to be used
+ *                       to create codec.
+ *                       In case of error, NULL is returned.
+ */
+Engine_Handle Engine_open(String name, Engine_Attrs *attrs, Engine_Error *ec)
+
+
+######################### VIDDEC3 APIs #########################
+/*==================================================================*/
+/** VIDDEC3_create      : Create Decoder codec.
+ *
+ * @ param engine  [in] : Engine Handle obtained in Engine_open() call.
+ * @ param name    [in] : Name of Decoder codec.
+ * @ param params  [in] : Pointer to Static parameters structure of codec
+ *                        allocated using dce_alloc() API.
+ * @ return             : Codec Handle is returned to be used for
+ *                        future CE calls.
+ *                        In case of error, NULL is returned.
+ */
+VIDDEC3_Handle VIDDEC3_create(Engine_Handle engine, String name,
+                              VIDDEC3_Params *params)
+
+
+/*==================================================================*/
+/** VIDDEC3_control       : Codec control call.
+ *
+ * @ param codec     [in] : Codec Handle obtained in VIDDEC3_create() call.
+ * @ param id        [in] : Command id for XDM control operation.
+ * @ param dynParams [in] : Pointer to dynamic parameters structure
+ *                          of codec allocated using dce_alloc() API.
+ * @ param status   [out] : Pointer to status parameters structure
+ *                          of codec allocated using dce_alloc() API.
+ *                          If 'id' is XDM_GETVERSION, then
+ *                          status->data.buf should have a pointer to a
+ *                          buffer allocated through dce_alloc() API.
+ * @ return               : DCE error status of control call is returned.
+ *                #DCE_EOK              [0]  : Success.
+ *                #DCE_EXDM_FAIL        [-1] : XDM Failure.
+ *                #DCE_EXDM_UNSUPPORTED [-3] : Unsupported XDM request.
+ *                #DCE_EIPC_CALL_FAIL   [-5] : MmRpc Call failed.
+ *                #DCE_EINVALID_INPUT   [-6] : Invalid Inputs.
+ */
+XDAS_Int32 VIDDEC3_control(VIDDEC3_Handle codec, VIDDEC3_Cmd id,
+                           VIDDEC3_DynamicParams *dynParams, VIDDEC3_Status *status)
+
+
+/*==================================================================*/
+/** VIDDEC3_process      : Decode process call.
+ *
+ * @ param codec   [in]  : Codec Handle obtained in VIDDEC3_create() call.
+ * @ param inBufs  [in]  : Pointer to Input Buffer Descriptor structure
+ *                         of codec allocated using dce_alloc() API.
+ *                         inBufs->descs[0].buf should have a virtual pointer
+ *                         to the Input Buffer in QNX. In Linux/Android, it
+ *                         should have a DMA Buf FD to the Input Buffer.
+ * @ param outBufs [in]  : Pointer to Output Buffer Descriptor structure
+ *                         of codec allocated using dce_alloc() API.
+ *                         outBufs->descs[0].buf and outBufs->descs[1].buf
+ *                         should have virtual pointers to the Output
+ *                         Luma and Chroma Buffers respectively in QNX.
+ *                         In Linux/Android, these fields should have
+ *                         DMA Buf FDs to the Output Buffers.
+ * @ param inArgs  [in]  : Pointer to Input Arguments structure
+ *                         of codec allocated using dce_alloc() API.
+ * @ param outArgs [out] : Pointer to Output Arguments structure
+ *                         of codec allocated using dce_alloc() API.
+ * @ return              : DCE error status of process call is returned.
+ *                #DCE_EOK              [0]  : Success.
+ *                #DCE_EXDM_FAIL        [-1] : XDM Failure.
+ *                #DCE_EXDM_UNSUPPORTED [-3] : Unsupported XDM request.
+ *                #DCE_EIPC_CALL_FAIL   [-5] : MmRpc Call failed.
+ *                #DCE_EINVALID_INPUT   [-6] : Invalid Inputs.
+ */
+XDAS_Int32 VIDDEC3_process(VIDDEC3_Handle codec,
+                           XDM2_BufDesc *inBufs, XDM2_BufDesc *outBufs,
+                           VIDDEC3_InArgs *inArgs, VIDDEC3_OutArgs *outArgs)
+
+
+/*===============================================================*/
+/** VIDDEC3_delete       : Delete Decode codec instance.
+ *
+ * @ param codec  [in]   : Codec Handle obtained in VIDDEC3_create() call.
+ * @ return : NIL.
+ */
+Void VIDDEC3_delete(VIDDEC3_Handle codec)
+
+
+######################### VIDDENC2 APIs #########################
+/*==================================================================*/
+/** VIDENC2_create      : Create Encoder codec.
+ *
+ * @ param engine  [in] : Engine Handle obtained in Engine_open() call.
+ * @ param name    [in] : Name of Encoder codec.
+ * @ param params  [in] : Pointer to Static parameters structure of codec
+ *                        allocated using dce_alloc() API.
+ * @ return             : Codec Handle is returned to be used for
+ *                        future CE calls.
+ *                        In case of error, NULL is returned.
+ */
+VIDENC2_Handle VIDENC2_create(Engine_Handle engine, String name,
+                              VIDENC2_Params *params)
+
+
+/*==================================================================*/
+/** VIDENC2_control       : Codec control call.
+ *
+ * @ param codec     [in] : Codec Handle obtained in VIDENC2_create() call.
+ * @ param id        [in] : Command id for XDM control operation.
+ * @ param dynParams [in] : Pointer to dynamic parameters structure
+ *                          of codec allocated using dce_alloc() API.
+ * @ param status   [out] : Pointer to status parameters structure
+ *                          of codec allocated using dce_alloc() API.
+ *                          If 'id' is XDM_GETVERSION, then
+ *                          status->data.buf should have a pointer to a
+ *                          buffer allocated through dce_alloc() API.
+ * @ return               : DCE error status of control call is returned.
+ *                #DCE_EOK              [0]  : Success.
+ *                #DCE_EXDM_FAIL        [-1] : XDM Failure.
+ *                #DCE_EXDM_UNSUPPORTED [-3] : Unsupported XDM request.
+ *                #DCE_EIPC_CALL_FAIL   [-5] : MmRpc Call failed.
+ *                #DCE_EINVALID_INPUT   [-6] : Invalid Inputs.
+ */
+XDAS_Int32 VIDENC2_control(VIDENC2_Handle codec, VIDENC2_Cmd id,
+                           VIDENC2_DynamicParams *dynParams, VIDENC2_Status *status)
+
+
+/*==================================================================*/
+/** VIDENC2_process      : Encode process call.
+ *
+ * @ param codec   [in]  : Codec Handle obtained in VIDENC2_create() call.
+ * @ param inBufs  [in]  : Pointer to Input Buffer Descriptor structure
+ *                         of codec allocated using dce_alloc() API.
+ *                         inBufs->planeDesc[0].buf and inBufs->planeDesc[1].buf
+ *                         should have virtual pointers to the Output
+ *                         Luma and Chroma Buffers respectively in QNX.
+ *                         In Linux/Android, these fields should have
+ *                         DMA Buf FDs to the Output Buffers.
+ * @ param outBufs [in]  : Pointer to Output Buffer Descriptor structure
+ *                         of codec allocated using dce_alloc() API.
+ *                         OutBufs->descs[0].buf should have a virtual pointer
+ *                         to the Input Buffer in QNX. In Linux/Android, it
+ *                         should have a DMA Buf FD to the Input Buffer.
+ * @ param inArgs  [in]  : Pointer to Input Arguments structure
+ *                         of codec allocated using dce_alloc() API.
+ * @ param outArgs [out] : Pointer to Output Arguments structure
+ *                         of codec allocated using dce_alloc() API.
+ * @ return              : DCE error status of process call is returned.
+ *                #DCE_EOK              [0]  : Success.
+ *                #DCE_EXDM_FAIL        [-1] : XDM Failure.
+ *                #DCE_EXDM_UNSUPPORTED [-3] : Unsupported XDM request.
+ *                #DCE_EIPC_CALL_FAIL   [-5] : MmRpc Call failed.
+ *                #DCE_EINVALID_INPUT   [-6] : Invalid Inputs.
+ */
+XDAS_Int32 VIDENC2_process(VIDENC2_Handle codec,
+                           IVIDEO2_BufDesc *inBufs, XDM2_BufDesc *outBufs,
+                           VIDENC2_InArgs *inArgs, VIDENC2_OutArgs *outArgs)
+
+
+/*===============================================================*/
+/** VIDENC2_delete       : Delete Encode codec instance.
+ *
+ * @ param codec  [in]   : Codec Handle obtained in VIDENC2_create() call.
+ * @ return : NIL.
+ */
+Void VIDENC2_delete(VIDENC2_Handle codec)
+
+
+/*==================================================================*/
+/** Engine_close       : Codec Engine Exposed API to Close Engine.
+ *
+ * @ param engine [in] : Engine Handle obtained in Engine_open() call.
+ */
+Void Engine_close(Engine_Handle engine)
+
+
+############################ libDCE APIs ############################
+
+/*==================================================================*/
+/** dce_alloc          : Allocate the Data structures passed to
+ *                       codec-engine APIs except Input/Output buffers.
+ * @ param sz    [in]  : Size of memory to be allocated.
+ * @ return            : Pointer to allocated memory.
+ */
+void *dce_alloc(int sz)
+
+
+/*==================================================================*/
+/** dce_free           : Free the Data structures passed to codec-engine APIs
+ *                       allocated through the dce_alloc() API.
+ * @ param ptr   [in]  : Pointer to allocated memory.
+ */
+void dce_free(void *ptr)
+
+
+/*================ The below APIs are LINUX specifc ================*/
+/*==================================================================*/
+/** dce_init           : Initialize DCE. Only Linux applications
+ *                       should call this API.
+ * @ return            : Pointer to omap_device structure.
+ */
+void *dce_init(void)
+
+
+/*===============================================================*/
+/** dce_deinit         : Deinitialize DCE. Only Linux applications
+ *                       should call this API.
+ * @ param dev    [in] : Pointer to omap_device structure.
+ */
+void dce_deinit(void *dev)
+
+
+/*===============================================================*/
+/** dce_buf_lock          : Pin or lock Tiler Buffers which would be
+ *                          used by the codec as reference buffers.
+ *                          Only Linux applications should call this API.
+ * @ param num    [in]    : Number of buffers to be locked.
+ * @ param handle [in]    : Pointer to array of DMA Buf FDs of the
+ *                          buffers to be locked.
+ * @ return               : DCE error status is returned.
+ *                #DCE_EOK              [0]  : Success.
+ *                #DCE_EOUT_OF_MEMORY   [-2] : Out of Shared/Tiler Memory.
+ *                #DCE_EIPC_CALL_FAIL   [-5] : MmRpc Call failed.
+ *                #DCE_EINVALID_INPUT   [-6] : Invalid Inputs.
+ */
+int dce_buf_lock(int num, size_t *handle)
+
+
+/*===============================================================*/
+/** dce_buf_unlock       : Unpin or unlock Tiler Buffers which were
+ *                         locked to be used by the codec as
+ *                         reference buffers. Only Linux
+ *                         applications should call this API.
+ * @ param num    [in]   : Number of buffers to be unlocked.
+ * @ param handle [in]   : Pointer to array of DMA Buf FDs of
+ *                         the buffers to be unlocked.
+ * @ return              : DCE error status is returned.
+ *                #DCE_EOK              [0]  : Success.
+ *                #DCE_EXDM_FAIL        [-1] : XDM Failure.
+ *                #DCE_EOUT_OF_MEMORY   [-2] : Out of Shared/Tiler Memory.
+ *                #DCE_EXDM_UNSUPPORTED [-3] : Unsupported XDM request.
+ *                #DCE_EIPC_CALL_FAIL   [-5] : MmRpc Call failed.
+ *                #DCE_EINVALID_INPUT   [-6] : Invalid Inputs.
+ */
+int dce_buf_unlock(int num, size_t *handle)
+
+
+/*===============================================================*/
+/** dce_get_fd         : Get OMAP DRM File Descriptor. Only Linux
+ *                       applications should call this API.
+ * @ return            : OMAP DRM File Descriptor.
+ */
+int dce_get_fd()
+
+
+/*===============================================================*/
+/** dce_set_fd         : Set OMAP DRM File Descriptor. Only Linux
+ *                       applications should call this API.
+ * @ param fd    [in]  : OMAP DRM File Descriptor.
+ */
+void dce_set_fd(int fd)
+
+
+******************************* API call flow ******************************
+
+// For a Decoder Application
+If (BUILDOS_LINUX) {
+    dev = dce_init()
+}
+    engine = Engine_open(String name, Engine_Attrs *attrs, Engine_Error *ec)
+
+    params = *dce_alloc(int sz)
+    Fill params
+
+    codec = VIDDEC3_create(Engine_Handle engine, String name,
+                              VIDDEC3_Params *params)
+
+    dynParams = *dce_alloc(int sz)
+    Fill dynParams
+    status = *dce_alloc(int sz)
+
+    XDAS_Int32 VIDDEC3_control(VIDDEC3_Handle codec, VIDDEC3_Cmd id,
+                               VIDDEC3_DynamicParams *dynParams, VIDDEC3_Status *status)
+
+    inBufs = *dce_alloc(int sz)
+    Fill inBufs
+    outBufs = *dce_alloc(int sz)
+    Fill outBufs
+    inArgs = *dce_alloc(int sz)
+    Fill inArgs
+    outArgs = *dce_alloc(int sz)
+    Fill outArgs
+
+    while(end of stream) {
+        if(BUILDOS_QNX) {
+
+            inBufs->descs[0].buf = virtual pointer of Input Buffer
+            outBufs->descs[0].buf = virtual pointer of Output Luma Buffer
+            outBufs->descs[1].buf = virtual pointer of Output Chroma Buffer
+
+        } else if (BUILDOS_LINUX || BUILDOS_ANDROID) {
+
+            inBufs->descs[0].buf = DMA Buf FD of Input Buffer
+
+            if( Output Buffer == MultiPlanar ) {
+                outBufs->descs[0].buf = DMA Buf FD of Output Luma Buffer
+                outBufs->descs[1].buf = DMA Buf FD of Output Chroma Buffer
+
+            } else {          // Output Buffer is Single Planar
+                outBufs->descs[0].buf = DMA Buf FD of Output Luma Buffer
+                outBufs->descs[1].buf = DMA Buf FD of Output Luma Buffer +
+                                        Offset of Chroma Buffer
+            }
+        }
+
+        if (BUILDOS_LINUX) {
+            handle <- (inArgs.inputID).DMA_Buf_FD of Luma [and/or] chroma
+            dce_buf_lock(int num, size_t *handle)
+        }
+
+        XDAS_Int32 VIDDEC3_process(VIDDEC3_Handle codec,
+                                   XDM2_BufDesc *inBufs, XDM2_BufDesc *outBufs,
+                                   VIDDEC3_InArgs *inArgs, VIDDEC3_OutArgs *outArgs)
+
+        if (BUILDOS_LINUX) {
+            handle <- (outArgs.freeBufID).DMA_Buf_FD of Luma [and/or] chroma
+            dce_buf_unlock(int num, size_t *handle)
+        }
+
+    }
+
+    Void VIDDEC3_delete(VIDDEC3_Handle codec)
+
+    Void Engine_close(Engine_Handle engine)
+
+If (BUILDOS_LINUX) {
+    dce_deinit(dev)
+}
+
+    dce_free(params)
+    dce_free(dynParams)
+    dce_free(status)
+    dce_free(inBufs)
+    dce_free(outBufs)
+    dce_free(inArgs)
+    dce_free(outArgs)
+
+
+
+************ Version Info of Headers included in packages folder ***********
 
 Tools:
 XDC version  : xdctools_3_25_02_70
