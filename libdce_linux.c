@@ -86,7 +86,7 @@ int dce_buf_lock(int num, size_t *handle)
 
     _ASSERT(num > 0, DCE_EINVALID_INPUT);
 
-    desc = memplugin_alloc(num * sizeof(MmRpc_BufDesc), 1, MEM_TILER_1D, 0, 0);
+    desc = malloc(num * sizeof(MmRpc_BufDesc));
     _ASSERT(desc != NULL, DCE_EOUT_OF_MEMORY);
 
     for( i = 0; i < num; i++ ) {
@@ -97,6 +97,9 @@ int dce_buf_lock(int num, size_t *handle)
 
     _ASSERT(eError == DCE_EOK, DCE_EIPC_CALL_FAIL);
 EXIT:
+    if( desc ) {
+        free(desc);
+    }
     return (eError);
 }
 
@@ -108,7 +111,7 @@ int dce_buf_unlock(int num, size_t *handle)
 
     _ASSERT(num > 0, DCE_EINVALID_INPUT);
 
-    desc = memplugin_alloc(num * sizeof(MmRpc_BufDesc), 1, MEM_TILER_1D, 0, 0);
+    desc = malloc(num * sizeof(MmRpc_BufDesc));
     _ASSERT(desc != NULL, DCE_EOUT_OF_MEMORY);
 
     for( i = 0; i < num; i++ ) {
@@ -119,6 +122,9 @@ int dce_buf_unlock(int num, size_t *handle)
 
     _ASSERT(eError == DCE_EOK, DCE_EIPC_CALL_FAIL);
 EXIT:
+    if( desc ) {
+        free(desc);
+    }
     return (eError);
 }
 
