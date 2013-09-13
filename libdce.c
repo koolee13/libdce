@@ -30,39 +30,6 @@
  * EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-/*
-********************************** Notes ******************************************
-*******
-********************************* Memory *****************************************
-*
-*******
-********************************* IPC 3.x *****************************************
-* Two approaches are followed for IPC MmRpc calls.
-* 1. All the parameters which need to be sent and received to/from IPU are coupled in a struct
-*     allocated from Shared Memory. Only the adrress of the struct is passed to MmRpc
-*     as a pointer argument. This approach is useful as MmRpc in some cases to avoid multiple
-*     translations.
-*     This approach is followed for :
-*     Engine_open(), Engine_close(), create(), control(), delete()
-*     For understanding refer to the Mmrpc_test.c in IPC 3.x
-* 2. All the parameters which need to be sent are given as separate arguments to
-*     MmRpc. This appraoch is needed when you need to translate an address which is
-*     ofsetted from a pointer which in itself needs to be translated.
-*     This apporach is followed for : process()
-*     For understanding, take the example of inbufs argument in process call(). Inbufs
-*     allocated in Shared memory and needs to be translated, has the address of Input
-*     buffer (allocated from Tiler). It is not possible to give the Input buffer as an argument
-*     to Mmrpc for translation until inbufs is given as a parameter to Mmrpc. Therefore inbuf
-*     can't be populated inside another Shared memory struct.
-* 3. This approach is a workaround to use approach [1] by solving the issue posed by [2].
-*     This approach is followed for : get_version()
-*     Taking the example of inbufs to explain, the Input buffer address will be one of the
-*     parameters of the struct (explained in [1]) along with inbufs address. Therefore the
-*     Input buffer address will get translated here. At the IPU, this address needs to be
-*     copied back to inbufs.
-*********************************************************************************
-*/
-
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -145,41 +112,45 @@ void dce_free(void *ptr)
     memplugin_free(ptr);
 }
 
-static inline int dce_sem_init(sem_t **sem)
+static inline int dce_sem_init(sem_t * *sem)
 {
-    if (*sem)
-        return DCE_EOK;;
+    if( *sem ) {
+        return (DCE_EOK);
+    }
 
 #ifdef BUILDOS_ANDROID
     *sem = malloc(sizeof(sem_t));
-    int ret = sem_init(*sem, 0, 1);
-    return ret;
+    int    ret = sem_init(*sem, 0, 1);
+    return (ret);
 #else
     *sem = sem_open("/dce_semaphore", O_CREAT, S_IRWXU | S_IRWXO | S_IRWXG, 1);
-    return (*sem) ? DCE_EOK : SEM_FAILED;
+    return ((*sem) ? DCE_EOK : SEM_FAILED);
 #endif
 }
 
 static inline int dce_sem_wait(sem_t *sem)
 {
-    if (NULL == sem)
-        return DCE_EINVALID_INPUT;
+    if( NULL == sem ) {
+        return (DCE_EINVALID_INPUT);
+    }
 
-    return sem_wait(sem);
+    return (sem_wait(sem));
 }
 
 static inline int dce_sem_post(sem_t *sem)
 {
-    if (NULL == sem)
-        return DCE_EINVALID_INPUT;
+    if( NULL == sem ) {
+        return (DCE_EINVALID_INPUT);
+    }
 
-    return sem_post(sem);
+    return (sem_post(sem));
 }
 
-static inline void dce_sem_close(sem_t **sem)
+static inline void dce_sem_close(sem_t * *sem)
 {
-    if (NULL == *sem)
+    if( NULL == *sem ) {
         return;
+    }
 
 #ifdef BUILDOS_ANDROID
     sem_destroy(*sem);
@@ -200,7 +171,7 @@ static int dce_ipc_init(void)
     MmRpc_Params        args;
     dce_error_status    eError = DCE_EOK;
 
-    printf(" >> dce_ipc_init\n");
+    DEBUG(" >> dce_ipc_init\n");
 
     count++;
     /* Check if already Initialized */
@@ -213,7 +184,7 @@ static int dce_ipc_init(void)
 
     _ASSERT_AND_EXECUTE(eError == DCE_EOK, DCE_EIPC_CREATE_FAIL, count--);
 
-    printf("open(/dev/" DCE_DEVICE_NAME ") -> 0x%x\n", (int)MmRpcHandle);
+    DEBUG("open(/dev/" DCE_DEVICE_NAME ") -> 0x%x\n", (int)MmRpcHandle);
 
 EXIT:
     return (eError);
@@ -265,7 +236,7 @@ Engine_Handle Engine_open(String name, Engine_Attrs *attrs, Engine_Error *ec)
     /* Initialize IPC. In case of Error Deinitialize them */
     _ASSERT_AND_EXECUTE(dce_ipc_init() == DCE_EOK, DCE_EIPC_CREATE_FAIL, dce_ipc_deinit());
 
-    printf(">> Engine_open Params::name = %s size = %d\n", name, strlen(name));
+    INFO(">> Engine_open Params::name = %s size = %d\n", name, strlen(name));
     /* Allocate Shared memory for the engine_open rpc msg structure*/
     /* Tiler Memory preferred in QNX */
     engine_open_msg = memplugin_alloc(sizeof(dce_engine_open), 1, DEFAULT_REGION, 0, 0);
@@ -527,8 +498,9 @@ static XDAS_Int32 process(void *codec, void *inBufs, void *outBufs,
     int                 fxnRet, count, total_count, numInBufs = 0, numOutBufs = 0;
     dce_error_status    eError = DCE_EOK;
     void             * *data_buf = NULL;
+
 #ifdef BUILDOS_ANDROID
-    int32_t             inbuf_offset[MAX_INPUT_BUF];
+    int32_t    inbuf_offset[MAX_INPUT_BUF];
 #endif
 
     _ASSERT(codec != NULL, DCE_EINVALID_INPUT);
@@ -572,8 +544,8 @@ static XDAS_Int32 process(void *codec, void *inBufs, void *outBufs,
             /* via memheader offset field. Hence the buf ptr needs to be advanced with the offset   */
             inbuf_offset[count] = P2H(*data_buf)->offset;
             Fill_MmRpc_fxnCtx_Xlt_Array(&(fxnCtx.xltAry[total_count]), INBUFS_INDEX, MmRpc_OFFSET((int32_t)inBufs, (int32_t)data_buf),
-                                        (size_t)P2H(*data_buf), (size_t)memplugin_share((void*)*data_buf));
-            *(uint8_t*)data_buf += inbuf_offset[count];
+                                        (size_t)P2H(*data_buf), (size_t)memplugin_share((void *)*data_buf));
+            *(uint8_t *)data_buf += inbuf_offset[count];
 #else
             Fill_MmRpc_fxnCtx_Xlt_Array(&(fxnCtx.xltAry[total_count]), INBUFS_INDEX, MmRpc_OFFSET((int32_t)inBufs, (int32_t)data_buf),
                                         (size_t)*data_buf, (size_t)*data_buf);
@@ -618,13 +590,15 @@ static XDAS_Int32 process(void *codec, void *inBufs, void *outBufs,
     _ASSERT(eError == DCE_EOK, DCE_EIPC_CALL_FAIL);
 
 #ifdef BUILDOS_ANDROID
-    for( count = 0; count < numInBufs; count++) {
+
+    for( count = 0; count < numInBufs; count++ ) {
         if( codec_id == OMAP_DCE_VIDDEC3 ) {
             /* restore the actual buf ptr before returing to the mmf */
             data_buf = (void * *)(&(((XDM2_BufDesc *)inBufs)->descs[count].buf));
-            *(uint8_t*)data_buf -= inbuf_offset[count];
+            *(uint8_t *)data_buf -= inbuf_offset[count];
         }
     }
+
 #endif
 
     eError = (dce_error_status)(fxnRet);
