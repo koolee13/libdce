@@ -42,7 +42,7 @@ extern struct omap_device   *OmapDev;
  *  @memory_type : Currently dce_alloc is used on for parameter buffer
  *  Returns a virtual address pointer to omap_bo buffer or the param buffer
  */
-void *memplugin_alloc(int sz, int height, mem_type memory_type)
+void *memplugin_alloc(int sz, int height, MemRegion region, int align, int flags)
 {
     MemHeader        *h;
     struct omap_bo   *bo = omap_bo_new(OmapDev, sz + sizeof(MemHeader), OMAP_BO_CACHED);
@@ -56,6 +56,7 @@ void *memplugin_alloc(int sz, int height, mem_type memory_type)
     h->size = sz;
     h->ptr = (void *)bo;
     h->dma_buf_fd = 0;
+    h->region = region;
 
     return (H2P(h));
 
@@ -65,7 +66,7 @@ void *memplugin_alloc(int sz, int height, mem_type memory_type)
  * @ptr: pointer to omap_bo buffer, to be freed
  * @memory_type: Currently dce_free is called on parameter buffers only
  */
-void memplugin_free(void *ptr, mem_type memory_type)
+void memplugin_free(void *ptr)
 {
     if( ptr ) {
         MemHeader   *h = P2H(ptr);
@@ -77,7 +78,7 @@ void memplugin_free(void *ptr, mem_type memory_type)
  * @ptr : pointer of omap_bo buffer, to be converted to fd
  * Returns a file discriptor for the omap_bo buffer
  */
-int memplugin_share(void *ptr)
+int32_t memplugin_share(void *ptr)
 {
     if( ptr ) {
         MemHeader   *h = P2H(ptr);

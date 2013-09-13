@@ -137,12 +137,12 @@ static inline void Fill_MmRpc_fxnCtx_Xlt_Array(MmRpc_Xlt *mmrpc_xlt, int index, 
 /* These interfaces are implemented to maintain Backward Compatability          */
 void *dce_alloc(int sz)
 {
-    return (memplugin_alloc(sz, 0, TILER_1D_BUFFER));
+    return (memplugin_alloc(sz, 1, MEM_TILER_1D, 0, 0));
 }
 
 void dce_free(void *ptr)
 {
-    memplugin_free(ptr, TILER_1D_BUFFER);
+    memplugin_free(ptr);
 }
 
 /*=====================================================================================*/
@@ -225,11 +225,11 @@ Engine_Handle Engine_open(String name, Engine_Attrs *attrs, Engine_Error *ec)
     printf(">> Engine_open Params::name = %s size = %d\n", name, strlen(name));
     /* Allocate Shared memory for the engine_open rpc msg structure*/
     /* Tiler Memory preferred in QNX */
-    engine_open_msg = memplugin_alloc(sizeof(dce_engine_open), 0, TILER_1D_BUFFER);
+    engine_open_msg = memplugin_alloc(sizeof(dce_engine_open), 1, DEFAULT_REGION, 0, 0);
     _ASSERT_AND_EXECUTE(engine_open_msg != NULL, DCE_EOUT_OF_MEMORY, engine_handle = NULL);
 
     if( attrs ) {
-        engine_attrs = memplugin_alloc(sizeof(Engine_Attrs), 0, TILER_1D_BUFFER);
+        engine_attrs = memplugin_alloc(sizeof(Engine_Attrs), 1, DEFAULT_REGION, 0, 0);
         _ASSERT_AND_EXECUTE(engine_attrs != NULL, DCE_EOUT_OF_MEMORY, engine_handle = NULL);
         *engine_attrs = *attrs;
     }
@@ -257,9 +257,9 @@ EXIT:
     /* Unlock dce_ipc_init() and Engine_open() IPU call */
     _ASSERT(sem_post(dce_semaphore) == DCE_EOK, DCE_ESEMAPHORE_FAIL);
 
-    memplugin_free(engine_open_msg, TILER_1D_BUFFER);
+    memplugin_free(engine_open_msg);
     if( engine_attrs ) {
-        memplugin_free(engine_attrs, TILER_1D_BUFFER);
+        memplugin_free(engine_attrs);
     }
     return ((Engine_Handle)engine_handle);
 }
@@ -325,7 +325,7 @@ static void *create(Engine_Handle engine, String name, void *params, dce_codec_t
     _ASSERT(params != NULL, DCE_EINVALID_INPUT);
 
     /* Allocate shared memory for translating codec name to IPU */
-    codec_name = memplugin_alloc(MAX_NAME_LENGTH * sizeof(char), 0, TILER_1D_BUFFER);
+    codec_name = memplugin_alloc(MAX_NAME_LENGTH * sizeof(char), 1, DEFAULT_REGION, 0, 0);
     _ASSERT_AND_EXECUTE(codec_name != NULL, DCE_EOUT_OF_MEMORY, codec_handle = NULL);
 
     strncpy(codec_name, name, strlen(name));
@@ -345,7 +345,7 @@ static void *create(Engine_Handle engine, String name, void *params, dce_codec_t
     _ASSERT_AND_EXECUTE(eError == DCE_EOK, DCE_EIPC_CALL_FAIL, codec_handle = NULL);
 
 EXIT:
-    memplugin_free(codec_name, TILER_1D_BUFFER);
+    memplugin_free(codec_name);
     return ((void *)codec_handle);
 }
 

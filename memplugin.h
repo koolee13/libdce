@@ -42,6 +42,7 @@
 #include <xf86drm.h>
 #include <omap_drm.h>
 #include <omap_drmif.h>
+#define DEFAULT_REGION MEM_TILER_1D
 #endif /* BUILDOS_LINUX */
 
 
@@ -50,6 +51,7 @@
 #include <tilermem.h>
 #include <SharedMemoryAllocatorUsr.h>
 #include <memmgr.h>
+#define DEFAULT_REGION MEM_TILER_1D
 #endif /* BUILDOS_QNX */
 
 
@@ -65,21 +67,23 @@
 /* or IH264DEC_Params                                                                   */
 typedef struct MemHeader {
     uint32_t size;
-    void    *ptr;
-#if defined(BUILDOS_LINUX)
-    int32_t dma_buf_fd;
-#endif
+    void    *ptr;       /* vptr/handle for mpu access */
+    int32_t dma_buf_fd; /* shared dma buf fd */
+    uint32_t region;    /* mem region the buffer allocated from */
+    /* internal meta data for the buffer */
+    uint32_t offset;    /* offset for the actual data with in the buffer */
+    int32_t map_fd;     /* mmapped fd */
+    void * handle;      /*custom handle for the HLOS memallocator*/
 } MemHeader;
 
-
-typedef enum mem_type {
-    TILER_1D_BUFFER,
-    TILER8_2D_BUFFER,
-    TILER16_2D_BUFFER,
-    SHARED_MEMORY_BUFFER,
+typedef enum MemoryRegion {
+    MEM_TILER_1D,
+    MEM_TILER8_2D,
+    MEM_TILER16_2D,
+    MEM_CARVEOUT,
+    MEM_SHARED,
     MEM_MAX
-} mem_type;
-
+} MemRegion;
 
 /* DCE Error Types */
 typedef enum mem_error_status {
@@ -90,11 +94,9 @@ typedef enum mem_error_status {
     MEM_EOUT_OF_SYSTEM_MEMORY = -4
 } mem_error_status;
 
-void *memplugin_alloc(int sz, int height, mem_type memory_type);
-
-void memplugin_free(void *ptr, mem_type memory_type);
-
-int memplugin_share(void *ptr);
+void *memplugin_alloc(int sz, int height, MemRegion region, int align, int flags);
+void memplugin_free(void *ptr);
+int32_t memplugin_share(void *ptr);
 
 #endif /* __MEMPLUGIN_H__ */
 

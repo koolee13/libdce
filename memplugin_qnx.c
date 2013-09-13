@@ -37,7 +37,7 @@
 /* For TILER 2D Buffers : sz       = width                              */
 /*                                : height = nonzero                           */
 /* For other memory_types : height = 0                               */
-void *memplugin_alloc(int sz, int height, mem_type memory_type)
+void *memplugin_alloc(int sz, int height, MemRegion region, int align, int flags)
 {
     MemHeader          *h;
     shm_buf            *handle;
@@ -46,26 +46,26 @@ void *memplugin_alloc(int sz, int height, mem_type memory_type)
     mem_error_status    eError = MEM_EOK;
 
     _ASSERT(sz != 0, MEM_EINVALID_INPUT);
-    _ASSERT((memory_type < MEM_MAX) && (memory_type >= TILER_1D_BUFFER), MEM_EINVALID_INPUT);
+    _ASSERT((region < MEM_MAX) && (region >= MEM_TILER_1D), MEM_EINVALID_INPUT);
 
     /* Tiler buffer Allocations : Only Tiler 1D used for Parameter Buffers and RPC Message buffers */
-    if( memory_type == TILER_1D_BUFFER || memory_type == TILER8_2D_BUFFER || memory_type == TILER16_2D_BUFFER ) {
+    if( region == MEM_TILER_1D || region == MEM_TILER8_2D || region == MEM_TILER16_2D ) {
         num_block = 1;
 
-        if( memory_type == TILER_1D_BUFFER ) {
+        if( region == MEM_TILER_1D ) {
             /* Allocate in tiler paged mode (1d) container */
             block.pixelFormat = PIXEL_FMT_PAGE;
             block.dim.len = sz + sizeof(MemHeader);
 #if 0 /* Data Tiler Buffers not to be allocated by DCE */
-        } else if( memory_type == TILER8_2D_BUFFER ) {
+        } else if( region == MEM_TILER8_2D ) {
             /* Allocate in tiler 8 bit mode (2d) container */
-            _ASSERT(height != 0, MEM_EINVALID_INPUT);
+            _ASSERT(height != 1, MEM_EINVALID_INPUT);
             block.pixelFormat = PIXEL_FMT_8BIT;
             block.dim.area.width  = sz;
             block.dim.area.height = height;
         } else {
             /* Allocate in tiler 16 bit mode (2d) container */
-            _ASSERT(height != 0, MEM_EINVALID_INPUT);
+            _ASSERT(height != 1, MEM_EINVALID_INPUT);
             block.pixelFormat = PIXEL_FMT_16BIT;
             block.dim.area.width  = sz;
             block.dim.area.height = height;
@@ -78,6 +78,7 @@ void *memplugin_alloc(int sz, int height, mem_type memory_type)
         _ASSERT(h != NULL, MEM_EOUT_OF_TILER_MEMORY);
 
         h->size = sz;
+        h->region = region;
         memset(H2P(h), 0, sz);
         return (H2P(h));
     } else {
@@ -92,6 +93,7 @@ void *memplugin_alloc(int sz, int height, mem_type memory_type)
         _ASSERT_AND_EXECUTE(h != NULL, MEM_EOUT_OF_SHMEMORY, free(handle));
 
         h->size = sz;
+        h->region = region;
         h->ptr = handle;
         memset(H2P(h), 0, sz);
         return (H2P(h));
@@ -101,17 +103,19 @@ EXIT:
 }
 
 /* memory_type is not added if MemHeader is used for Tiler Buffers */
-void memplugin_free(void *ptr, mem_type memory_type)
+void memplugin_free(void *ptr)
 {
     shm_buf            *handle;
     mem_error_status    eError = MEM_EOK;
+    MemRegion region;
 
     _ASSERT(ptr != NULL, MEM_EINVALID_INPUT);
-    _ASSERT((memory_type < MEM_MAX) && (memory_type >= TILER_1D_BUFFER), MEM_EINVALID_INPUT);
+    region = (P2H(ptr))->region;
+    _ASSERT((region < MEM_MAX) && (region >= MEM_TILER_1D), MEM_EINVALID_INPUT);
 
-    if( memory_type == TILER_1D_BUFFER ) {
+    if( region == MEM_TILER_1D ) {
         MemMgr_Free(P2H(ptr));
-    } else if( memory_type == SHARED_MEMORY_BUFFER ) {
+    } else if( region == MEM_SHARED ) {
         handle = (P2H(ptr))->ptr;
         SHM_release(handle);
         free(handle);
@@ -121,10 +125,10 @@ void memplugin_free(void *ptr, mem_type memory_type)
 EXIT:;
 }
 
-inline int memplugin_share(void *ptr)
+inline int32_t memplugin_share(void *ptr)
 {
     /* No Userspace Virtual pointers to DMA BUF Handles conversion required*/
     /* Do nothing */
-    return ((int)ptr);
+    return ((int32_t)ptr);
 }
 
