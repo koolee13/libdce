@@ -64,6 +64,12 @@ extern int dce_debug;
 #define TRACE(lvl,FMT, ...)  do if ((lvl) <= dce_debug) { \
         printf("%s:%d:\t%s\t Error: "FMT,__FILE__, __LINE__,__FUNCTION__ ,##__VA_ARGS__); \
 }while( 0 )
+
+#elif defined BUILDOS_ANDROID
+#include <utils/Log.h>
+#define TRACE(lvl,FMT, ...)  do if ((lvl) <= dce_debug) { \
+        ALOGE("%s:%d:\t%s\t Error: "FMT,__FILE__, __LINE__,__FUNCTION__ ,##__VA_ARGS__); \
+}while( 0 )
 #endif
 
 /***************** ASSERT MACROS *********************/

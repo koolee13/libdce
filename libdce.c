@@ -150,8 +150,14 @@ static inline int dce_sem_init(sem_t **sem)
     if (*sem)
         return DCE_EOK;;
 
+#ifdef BUILDOS_ANDROID
+    *sem = malloc(sizeof(sem_t));
+    int ret = sem_init(*sem, 0, 1);
+    return ret;
+#else
     *sem = sem_open("/dce_semaphore", O_CREAT, S_IRWXU | S_IRWXO | S_IRWXG, 1);
     return (*sem) ? DCE_EOK : SEM_FAILED;
+#endif
 }
 
 static inline int dce_sem_wait(sem_t *sem)
@@ -175,7 +181,12 @@ static inline void dce_sem_close(sem_t **sem)
     if (NULL == *sem)
         return;
 
+#ifdef BUILDOS_ANDROID
+    sem_destroy(*sem);
+    free(*sem);
+#else
     sem_close(*sem);
+#endif
     *sem = NULL;
 }
 
@@ -516,6 +527,9 @@ static XDAS_Int32 process(void *codec, void *inBufs, void *outBufs,
     int                 fxnRet, count, total_count, numInBufs = 0, numOutBufs = 0;
     dce_error_status    eError = DCE_EOK;
     void             * *data_buf = NULL;
+#ifdef BUILDOS_ANDROID
+    int32_t             inbuf_offset[MAX_INPUT_BUF];
+#endif
 
     _ASSERT(codec != NULL, DCE_EINVALID_INPUT);
     _ASSERT(inBufs != NULL, DCE_EINVALID_INPUT);
@@ -552,8 +566,18 @@ static XDAS_Int32 process(void *codec, void *inBufs, void *outBufs,
     for( count = 0, total_count = 0; count < numInBufs; count++, total_count++ ) {
         if( codec_id == OMAP_DCE_VIDDEC3 ) {
             data_buf = (void * *)(&(((XDM2_BufDesc *)inBufs)->descs[count].buf));
+#ifdef BUILDOS_ANDROID
+            /* the decoder input buffer filled by the parsers, have an offset       */
+            /* for the actual data. the offset within the input buffer is provided   */
+            /* via memheader offset field. Hence the buf ptr needs to be advanced with the offset   */
+            inbuf_offset[count] = P2H(*data_buf)->offset;
+            Fill_MmRpc_fxnCtx_Xlt_Array(&(fxnCtx.xltAry[total_count]), INBUFS_INDEX, MmRpc_OFFSET((int32_t)inBufs, (int32_t)data_buf),
+                                        (size_t)P2H(*data_buf), (size_t)memplugin_share((void*)*data_buf));
+            *(uint8_t*)data_buf += inbuf_offset[count];
+#else
             Fill_MmRpc_fxnCtx_Xlt_Array(&(fxnCtx.xltAry[total_count]), INBUFS_INDEX, MmRpc_OFFSET((int32_t)inBufs, (int32_t)data_buf),
                                         (size_t)*data_buf, (size_t)*data_buf);
+#endif
         } else if( codec_id == OMAP_DCE_VIDENC2 ) {
             data_buf = (void * *)(&(((IVIDEO2_BufDesc *)inBufs)->planeDesc[count].buf));
             Fill_MmRpc_fxnCtx_Xlt_Array(&(fxnCtx.xltAry[total_count]), INBUFS_INDEX, MmRpc_OFFSET((int32_t)inBufs, (int32_t)data_buf),
@@ -592,6 +616,16 @@ static XDAS_Int32 process(void *codec, void *inBufs, void *outBufs,
     eError = MmRpc_call(MmRpcHandle, &fxnCtx, &fxnRet);
 
     _ASSERT(eError == DCE_EOK, DCE_EIPC_CALL_FAIL);
+
+#ifdef BUILDOS_ANDROID
+    for( count = 0; count < numInBufs; count++) {
+        if( codec_id == OMAP_DCE_VIDDEC3 ) {
+            /* restore the actual buf ptr before returing to the mmf */
+            data_buf = (void * *)(&(((XDM2_BufDesc *)inBufs)->descs[count].buf));
+            *(uint8_t*)data_buf -= inbuf_offset[count];
+        }
+    }
+#endif
 
     eError = (dce_error_status)(fxnRet);
 EXIT:

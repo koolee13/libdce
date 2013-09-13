@@ -43,17 +43,17 @@
 #include <omap_drm.h>
 #include <omap_drmif.h>
 #define DEFAULT_REGION MEM_TILER_1D
-#endif /* BUILDOS_LINUX */
 
-
-#if defined(BUILDOS_QNX)
+#elif defined(BUILDOS_QNX)
 /* IPC Headers */
 #include <tilermem.h>
 #include <SharedMemoryAllocatorUsr.h>
 #include <memmgr.h>
 #define DEFAULT_REGION MEM_TILER_1D
-#endif /* BUILDOS_QNX */
 
+#elif defined (BUILDOS_ANDROID)
+#define DEFAULT_REGION MEM_CARVEOUT
+#endif
 
 #define P2H(p) (&(((MemHeader *)(p))[-1]))
 #define H2P(h) ((void *)&(h)[1])
