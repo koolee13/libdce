@@ -145,6 +145,40 @@ void dce_free(void *ptr)
     memplugin_free(ptr);
 }
 
+static inline int dce_sem_init(sem_t **sem)
+{
+    if (*sem)
+        return DCE_EOK;;
+
+    *sem = sem_open("/dce_semaphore", O_CREAT, S_IRWXU | S_IRWXO | S_IRWXG, 1);
+    return (*sem) ? DCE_EOK : SEM_FAILED;
+}
+
+static inline int dce_sem_wait(sem_t *sem)
+{
+    if (NULL == sem)
+        return DCE_EINVALID_INPUT;
+
+    return sem_wait(sem);
+}
+
+static inline int dce_sem_post(sem_t *sem)
+{
+    if (NULL == sem)
+        return DCE_EINVALID_INPUT;
+
+    return sem_post(sem);
+}
+
+static inline void dce_sem_close(sem_t **sem)
+{
+    if (NULL == *sem)
+        return;
+
+    sem_close(*sem);
+    *sem = NULL;
+}
+
 /*=====================================================================================*/
 /** dce_ipc_init            : Initialize MmRpc. This function is called within Engine_open().
  *
@@ -213,11 +247,9 @@ Engine_Handle Engine_open(String name, Engine_Attrs *attrs, Engine_Error *ec)
 
     _ASSERT(name != '\0', DCE_EINVALID_INPUT);
 
-    if( dce_semaphore == NULL ) {
-        _ASSERT((dce_semaphore = sem_open("/dce_semaphore", O_CREAT, S_IRWXU | S_IRWXO | S_IRWXG, 1)) != SEM_FAILED, DCE_ESEMAPHORE_FAIL);
-    }
+    _ASSERT(dce_sem_init(&dce_semaphore) == DCE_EOK, DCE_ESEMAPHORE_FAIL);
     /* Lock dce_ipc_init() and Engine_open() IPU call to prevent hang*/
-    _ASSERT(sem_wait(dce_semaphore) == DCE_EOK, DCE_ESEMAPHORE_FAIL);
+    _ASSERT(dce_sem_wait(dce_semaphore) == DCE_EOK, DCE_ESEMAPHORE_FAIL);
 
     /* Initialize IPC. In case of Error Deinitialize them */
     _ASSERT_AND_EXECUTE(dce_ipc_init() == DCE_EOK, DCE_EIPC_CREATE_FAIL, dce_ipc_deinit());
@@ -255,7 +287,7 @@ Engine_Handle Engine_open(String name, Engine_Attrs *attrs, Engine_Error *ec)
 
 EXIT:
     /* Unlock dce_ipc_init() and Engine_open() IPU call */
-    _ASSERT(sem_post(dce_semaphore) == DCE_EOK, DCE_ESEMAPHORE_FAIL);
+    _ASSERT(dce_sem_post(dce_semaphore) == DCE_EOK, DCE_ESEMAPHORE_FAIL);
 
     memplugin_free(engine_open_msg);
     if( engine_attrs ) {
@@ -278,7 +310,7 @@ Void Engine_close(Engine_Handle engine)
     _ASSERT(engine != NULL, DCE_EINVALID_INPUT);
 
     /* Lock dce_ipc_deinit() and Engine_close() IPU call */
-    _ASSERT(sem_wait(dce_semaphore) == DCE_EOK, DCE_ESEMAPHORE_FAIL);
+    _ASSERT(dce_sem_wait(dce_semaphore) == DCE_EOK, DCE_ESEMAPHORE_FAIL);
 
     /* Marshall function arguments into the send buffer */
     Fill_MmRpc_fxnCtx(&fxnCtx, DCE_RPC_ENGINE_CLOSE, 1, 0, NULL);
@@ -293,9 +325,8 @@ EXIT:
     dce_ipc_deinit();
 
     /* Unlock dce_ipc_deinit() and Engine_close() IPU call */
-    _ASSERT(sem_post(dce_semaphore) == DCE_EOK, DCE_ESEMAPHORE_FAIL);
-    sem_close(dce_semaphore);
-
+    _ASSERT(dce_sem_post(dce_semaphore) == DCE_EOK, DCE_ESEMAPHORE_FAIL);
+    dce_sem_close(&dce_semaphore);
     return;
 }
 
