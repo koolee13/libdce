@@ -27,8 +27,8 @@ LOCAL_C_INCLUDES += \
     $(LOCAL_PATH)/packages/xdais/ \
     $(LOCAL_PATH)/packages/xdctools/ \
     $(LOCAL_PATH)/ \
-    $(LOCAL_PATH)/../osal/inc \
-    $(LOCAL_PATH)/../../ipc/packages/ti/ipc/mm \
+    hardware/ti/omap4xxx/omx/osal/inc \
+    hardware/ti/ipc/packages/ti/ipc/mm
 
 LOCAL_SHARED_LIBRARIES := \
     libipc \
@@ -45,7 +45,7 @@ LOCAL_SRC_FILES:= libdce.c
 
 
 LOCAL_MODULE:= libdce
-include $(BUILD_HEAPTRACKED_SHARED_LIBRARY)
+include $(BUILD_SHARED_LIBRARY)
 
 
 
