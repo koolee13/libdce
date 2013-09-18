@@ -501,6 +501,7 @@ static XDAS_Int32 process(void *codec, void *inBufs, void *outBufs,
 
 #ifdef BUILDOS_ANDROID
     int32_t    inbuf_offset[MAX_INPUT_BUF];
+    int32_t    outbuf_offset[MAX_OUTPUT_BUF];
 #endif
 
     _ASSERT(codec != NULL, DCE_EINVALID_INPUT);
@@ -545,7 +546,7 @@ static XDAS_Int32 process(void *codec, void *inBufs, void *outBufs,
             inbuf_offset[count] = P2H(*data_buf)->offset;
             Fill_MmRpc_fxnCtx_Xlt_Array(&(fxnCtx.xltAry[total_count]), INBUFS_INDEX, MmRpc_OFFSET((int32_t)inBufs, (int32_t)data_buf),
                                         (size_t)P2H(*data_buf), (size_t)memplugin_share((void *)*data_buf));
-            *(uint8_t *)data_buf += inbuf_offset[count];
+            *data_buf += inbuf_offset[count];
 #else
             Fill_MmRpc_fxnCtx_Xlt_Array(&(fxnCtx.xltAry[total_count]), INBUFS_INDEX, MmRpc_OFFSET((int32_t)inBufs, (int32_t)data_buf),
                                         (size_t)*data_buf, (size_t)*data_buf);
@@ -581,6 +582,19 @@ static XDAS_Int32 process(void *codec, void *inBufs, void *outBufs,
                 }
             }
         }
+#elif defined(BUILDOS_ANDROID)
+        else {
+            /* SinglePlanar Buffers for Decode usecase*/
+            /* the decoder out buffers allocated from non2D region have an offset */
+            /* for the UV data. the offset within the input buffer is provided   */
+            /* via memheader offset field. Hence the buf ptr needs to be advanced with the offset   */
+            data_buf = (void * *)(&(((XDM2_BufDesc *)outBufs)->descs[count].buf));
+            outbuf_offset[count] = P2H(*data_buf)->offset;
+            Fill_MmRpc_fxnCtx_Xlt_Array(&(fxnCtx.xltAry[total_count]), OUTBUFS_INDEX, MmRpc_OFFSET((int32_t)outBufs,       (int32_t)data_buf), (size_t)P2H(*data_buf), (size_t)memplugin_share((void*)*data_buf));
+            if(count == CHROMA_BUF) {
+                *data_buf += outbuf_offset[count];
+            }
+        }
 #endif
     }
 
@@ -595,7 +609,16 @@ static XDAS_Int32 process(void *codec, void *inBufs, void *outBufs,
         if( codec_id == OMAP_DCE_VIDDEC3 ) {
             /* restore the actual buf ptr before returing to the mmf */
             data_buf = (void * *)(&(((XDM2_BufDesc *)inBufs)->descs[count].buf));
-            *(uint8_t *)data_buf -= inbuf_offset[count];
+            *data_buf -= inbuf_offset[count];
+        }
+    }
+    /* Output Buffers */
+    for( count = 0; count < numOutBufs; count++ ) {
+        /* restore the actual ptr for UV buffer allocated from  */
+        /* non2D region */
+        if(count == CHROMA_BUF && outbuf_offset[count]) {
+            data_buf = (void * *)(&(((XDM2_BufDesc *)outBufs)->descs[count].buf));
+            *data_buf -= outbuf_offset[count];
         }
     }
 
