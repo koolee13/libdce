@@ -4,7 +4,8 @@ SUBDIRS                      = \
                                packages/codec_engine \
                                packages/ivahd_codecs \
                                packages/xdais \
-                               packages/xdctools
+                               packages/xdctools \
+                               packages/framework_components
 
 
 lib_LTLIBRARIES              = libdce.la
@@ -15,6 +16,7 @@ CE_CFLAGS                    = \
                                -I$(top_srcdir)/packages/ivahd_codecs \
                                -I$(top_srcdir)/packages/xdais \
                                -I$(top_srcdir)/packages/xdctools \
+                               -I$(top_srcdir)/packages/framework_components \
                                -I$(IPC_HEADERS)/ \
 			       -DBUILDOS_LINUX=1 -DDCE_DEBUG_LEVEL=1 \
 			       -DDCE_DEBUG_ENABLE=1 \

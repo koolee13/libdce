@@ -85,5 +85,6 @@ packages/codec_engine/Makefile
 packages/ivahd_codecs/Makefile
 packages/xdais/Makefile
 packages/xdctools/Makefile
+packages/framework_components/Makefile
 ])
 AC_OUTPUT
