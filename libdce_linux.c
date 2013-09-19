@@ -56,7 +56,7 @@ void *dce_init(void)
     DEBUG(" >> dce_init");
 
     /* Open omapdrm device */
-    if( !OmapDrm_FD && OmapDrm_FD == INVALID_DRM_FD ) {
+    if( OmapDrm_FD == INVALID_DRM_FD ) {
         DEBUG("Open omapdrm device");
         OmapDrm_FD = drmOpen("omapdrm", "platform:omapdrm:00");
         _ASSERT(OmapDrm_FD > 0, DCE_EOMAPDRM_FAIL);
