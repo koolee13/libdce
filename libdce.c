@@ -234,7 +234,7 @@ Engine_Handle Engine_open(String name, Engine_Attrs *attrs, Engine_Error *ec)
     _ASSERT(dce_sem_wait(dce_semaphore) == DCE_EOK, DCE_ESEMAPHORE_FAIL);
 
     /* Initialize IPC. In case of Error Deinitialize them */
-    _ASSERT_AND_EXECUTE(dce_ipc_init() == DCE_EOK, DCE_EIPC_CREATE_FAIL, dce_ipc_deinit());
+    _ASSERT_AND_EXECUTE(dce_ipc_init() == DCE_EOK, DCE_EIPC_CREATE_FAIL, dce_sem_close(&dce_semaphore));
 
     INFO(">> Engine_open Params::name = %s size = %d\n", name, strlen(name));
     /* Allocate Shared memory for the engine_open rpc msg structure*/
