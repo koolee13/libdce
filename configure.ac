@@ -70,7 +70,9 @@ dnl *** checks for dependancy libraries ***
 dnl *** set variables based on configure arguments ***
 
 if test "$IPC_HEADERS" != "" ; then
-        AC_CHECK_FILES(["$IPC_HEADERS"],,[AC_MSG_ERROR(["$IPC_HEADERS" not found, Set path variable IPC_HEADERS])])
+        if test "$cross_compiling" != "yes" ; then
+                AC_CHECK_FILES(["$IPC_HEADERS"],,[AC_MSG_ERROR(["$IPC_HEADERS" not found, Set path variable IPC_HEADERS])])
+        fi
         AC_SUBST(IPC_HEADERS)
 else
         AC_MSG_ERROR([Set path variable IPC_HEADERS])
