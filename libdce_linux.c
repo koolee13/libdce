@@ -46,6 +46,7 @@
 #define INVALID_DRM_FD (-1)
 
 int                    OmapDrm_FD  = INVALID_DRM_FD;
+int                    bDrmOpenedByDce = FALSE;
 struct omap_device    *OmapDev     = NULL;
 extern MmRpc_Handle    MmRpcHandle;
 
@@ -60,6 +61,7 @@ void *dce_init(void)
         DEBUG("Open omapdrm device");
         OmapDrm_FD = drmOpen("omapdrm", "platform:omapdrm:00");
         _ASSERT(OmapDrm_FD > 0, DCE_EOMAPDRM_FAIL);
+        bDrmOpenedByDce = TRUE;
     }
     OmapDev = omap_device_new(OmapDrm_FD);
     _ASSERT(OmapDev != NULL, DCE_EOMAPDRM_FAIL);
@@ -72,7 +74,10 @@ void dce_deinit(void *dev)
 {
     omap_device_del(dev);
     dev = NULL;
-    close(OmapDrm_FD);
+    if (bDrmOpenedByDce == TRUE) {
+        close(OmapDrm_FD);
+        bDrmOpenedByDce = FALSE;
+    }
     OmapDrm_FD = INVALID_DRM_FD;
 
     return;
@@ -131,7 +136,12 @@ EXIT:
 /* Incase of X11 or Wayland the fd can be shared to libdce using this call */
 void dce_set_fd(int dce_fd)
 {
-    OmapDrm_FD = dce_fd;
+    if (OmapDrm_FD == INVALID_DRM_FD) {
+        OmapDrm_FD = dce_fd;
+    }
+    else {
+        DEBUG("Cannot set the fd, omapdrm device fd is already set");
+    }
 }
 
 int dce_get_fd(void)
