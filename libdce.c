@@ -33,10 +33,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <pthread.h>
 #include <errno.h>
-#include <fcntl.h>        /* For O_* constants */
-#include <sys/stat.h>     /* For mode constants */
-#include <semaphore.h>
 
 /* IPC Headers */
 #include <MmRpc.h>
@@ -51,8 +49,8 @@
 /********************* GLOBALS ***********************/
 /* Hande used for Remote Communication                               */
 MmRpc_Handle    MmRpcHandle = NULL;
-sem_t          *dce_semaphore = NULL;
-static int      count = 0;
+static pthread_mutex_t    mutex = PTHREAD_MUTEX_INITIALIZER;
+static int      __ClientCount = 0;
 int             dce_debug = DCE_DEBUG_LEVEL;
 
 /****************** INLINE FUNCTIONS ********************/
@@ -112,55 +110,6 @@ void dce_free(void *ptr)
     memplugin_free(ptr);
 }
 
-static inline int dce_sem_init(sem_t * *sem)
-{
-    if( *sem ) {
-        return (DCE_EOK);
-    }
-
-#ifdef BUILDOS_ANDROID
-    *sem = malloc(sizeof(sem_t));
-    int    ret = sem_init(*sem, 0, 1);
-    return (ret);
-#else
-    *sem = sem_open("/dce_semaphore", O_CREAT, S_IRWXU | S_IRWXO | S_IRWXG, 1);
-    return ((*sem) ? DCE_EOK : SEM_FAILED);
-#endif
-}
-
-static inline int dce_sem_wait(sem_t *sem)
-{
-    if( NULL == sem ) {
-        return (DCE_EINVALID_INPUT);
-    }
-
-    return (sem_wait(sem));
-}
-
-static inline int dce_sem_post(sem_t *sem)
-{
-    if( NULL == sem ) {
-        return (DCE_EINVALID_INPUT);
-    }
-
-    return (sem_post(sem));
-}
-
-static inline void dce_sem_close(sem_t * *sem)
-{
-    if( NULL == *sem ) {
-        return;
-    }
-
-#ifdef BUILDOS_ANDROID
-    sem_destroy(*sem);
-    free(*sem);
-#else
-    sem_close(*sem);
-#endif
-    *sem = NULL;
-}
-
 /*=====================================================================================*/
 /** dce_ipc_init            : Initialize MmRpc. This function is called within Engine_open().
  *
@@ -173,16 +122,18 @@ static int dce_ipc_init(void)
 
     DEBUG(" >> dce_ipc_init\n");
 
-    count++;
+    __ClientCount++;
     /* Check if already Initialized */
-    _ASSERT(count == 1, DCE_EOK);
+    if (__ClientCount > 1) {
+        goto EXIT;
+    }
 
     /* Create remote server insance */
     MmRpc_Params_init(&args);
 
     eError = MmRpc_create(DCE_DEVICE_NAME, &args, &MmRpcHandle);
 
-    _ASSERT_AND_EXECUTE(eError == DCE_EOK, DCE_EIPC_CREATE_FAIL, count--);
+    _ASSERT_AND_EXECUTE(eError == DCE_EOK, DCE_EIPC_CREATE_FAIL, __ClientCount--);
 
     DEBUG("open(/dev/" DCE_DEVICE_NAME ") -> 0x%x\n", (int)MmRpcHandle);
 
@@ -196,8 +147,8 @@ EXIT:
  */
 static void dce_ipc_deinit()
 {
-    count--;
-    if( count > 0 ) {
+    __ClientCount--;
+    if( __ClientCount > 0 ) {
         goto EXIT;
     }
 
@@ -229,12 +180,10 @@ Engine_Handle Engine_open(String name, Engine_Attrs *attrs, Engine_Error *ec)
 
     _ASSERT(name != '\0', DCE_EINVALID_INPUT);
 
-    _ASSERT(dce_sem_init(&dce_semaphore) == DCE_EOK, DCE_ESEMAPHORE_FAIL);
-    /* Lock dce_ipc_init() and Engine_open() IPU call to prevent hang*/
-    _ASSERT(dce_sem_wait(dce_semaphore) == DCE_EOK, DCE_ESEMAPHORE_FAIL);
+    pthread_mutex_lock(&mutex);
 
     /* Initialize IPC. In case of Error Deinitialize them */
-    _ASSERT_AND_EXECUTE(dce_ipc_init() == DCE_EOK, DCE_EIPC_CREATE_FAIL, dce_sem_close(&dce_semaphore));
+    _ASSERT(dce_ipc_init() == DCE_EOK, DCE_EIPC_CREATE_FAIL);
 
     INFO(">> Engine_open Params::name = %s size = %d\n", name, strlen(name));
     /* Allocate Shared memory for the engine_open rpc msg structure*/
@@ -266,15 +215,15 @@ Engine_Handle Engine_open(String name, Engine_Attrs *attrs, Engine_Error *ec)
     if( ec ) {
         *ec = engine_open_msg->error_code;
     }
-
 EXIT:
-    /* Unlock dce_ipc_init() and Engine_open() IPU call */
-    _ASSERT(dce_sem_post(dce_semaphore) == DCE_EOK, DCE_ESEMAPHORE_FAIL);
 
     memplugin_free(engine_open_msg);
+
     if( engine_attrs ) {
         memplugin_free(engine_attrs);
     }
+    pthread_mutex_unlock(&mutex);
+
     return ((Engine_Handle)engine_handle);
 }
 
@@ -289,10 +238,9 @@ Void Engine_close(Engine_Handle engine)
     int32_t             fxnRet;
     dce_error_status    eError = DCE_EOK;
 
-    _ASSERT(engine != NULL, DCE_EINVALID_INPUT);
+    pthread_mutex_lock(&mutex);
 
-    /* Lock dce_ipc_deinit() and Engine_close() IPU call */
-    _ASSERT(dce_sem_wait(dce_semaphore) == DCE_EOK, DCE_ESEMAPHORE_FAIL);
+    _ASSERT(engine != NULL, DCE_EINVALID_INPUT);
 
     /* Marshall function arguments into the send buffer */
     Fill_MmRpc_fxnCtx(&fxnCtx, DCE_RPC_ENGINE_CLOSE, 1, 0, NULL);
@@ -306,9 +254,8 @@ Void Engine_close(Engine_Handle engine)
 EXIT:
     dce_ipc_deinit();
 
-    /* Unlock dce_ipc_deinit() and Engine_close() IPU call */
-    _ASSERT(dce_sem_post(dce_semaphore) == DCE_EOK, DCE_ESEMAPHORE_FAIL);
-    dce_sem_close(&dce_semaphore);
+    pthread_mutex_unlock(&mutex);
+
     return;
 }
 
