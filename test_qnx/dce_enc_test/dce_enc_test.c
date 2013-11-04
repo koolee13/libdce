@@ -280,15 +280,10 @@ static const char *get_path(const char *pattern, int cnt)
 }
 
 //#define DUMPINPUTDATA
-//#define TMPDUMPDATA
 //#define DUMPOUTPUTDATA
 
 #ifdef DUMPINPUTDATA
 FILE   *inputDump;
-#endif
-
-#ifdef TMPDUMPDATA
-FILE   *tmpDump;
 #endif
 
 #ifdef DUMPOUTPUTDATA
@@ -300,42 +295,21 @@ FILE   *outputDump;
 int read_input(const char *pattern, int cnt, char *input)
 {
     int    sz = 0, n = 0, num_planes, i, buf_height;
-    int   *pTmpBuffer = NULL, *pTmpBufferPos = NULL;
 
     const char   *path = get_path(pattern, cnt);
     int           fd = open(path, O_RDONLY);
 
     //DEBUG("Open file fd %d errno %d", fd, errno);
-    /* if we can't find the file, then at the end of stream */
     if( fd < 0 ) {
         DEBUG("open input file failed");
-        return (0);
+        return (-1);
     }
 
     sz = width * height * 3 / 2;
-    pTmpBuffer = calloc(sz, 1);
-    pTmpBufferPos = pTmpBuffer;
 
-    //Read 1 frame of NV12 YUV into input. Since it's TILER - stride = 4096
-    lseek(fd, input_offset, SEEK_SET);
-    n = read(fd, pTmpBuffer, sz); //reading 1 input frame width * height * 3/2
-    DEBUG("reading input[%p] size of n = %d where input_offset is %d", input, n, input_offset);
-    if( n ) {
-        input_offset += n;
-    } else {
-        sz = -1; //cannot read more input
-        free(pTmpBuffer);
-        close(fd);
-
-        DEBUG("sz=%d", sz);
-        return (sz);
-    }
-
-#ifdef TMPDUMPDATA
-    char          Buff[100];
-    int static    GlobalCount = 0;
-#endif
-
+    // Filling the input in TILER 2D mode; where
+    // Luma has size of Stride "4096" * height.
+    // and Chroma has size of Stride "4096 * height / 2.
     for( num_planes = 0; num_planes < 2; num_planes++ ) {
         if( num_planes ) { //UV location
             buf_height = height / 2;
@@ -344,36 +318,19 @@ int read_input(const char *pattern, int cnt, char *input)
         }
 
         for( i = 0; i < buf_height; i++ ) {
-            memcpy(input, pTmpBufferPos, width);
-
-#ifdef TMPDUMPDATA
-
-            if( GlobalCount < buf_height ) {
-                DEBUG("[DCE_ENC_TEST] GlobalCount %d\n", GlobalCount);
-                sprintf(Buff, "/sd/dce_enc_dump/dcefiledump%d.bin", GlobalCount);
-                tmpDump = fopen(Buff, "wb+");
-                if( tmpDump == NULL ) {
-                    DEBUG("[DCE_ENC_TEST] Error opening /sd/dce_enc_dump/dcefiledump\n");
-                } else {
-                    GlobalCount++;
-                    //DEBUG("Before Input [%p]\n", input);
-                    fwrite(input, 1, width, tmpDump);
-
-                    fflush(tmpDump);
-                    fclose(tmpDump);
-                    tmpDump = NULL;
-                }
+            lseek(fd, input_offset, SEEK_SET);
+            n = read(fd, input, width);
+            if( n ) {
+                input_offset += n;
+            } else {
+                close(fd);
+                DEBUG("Reading REACH EOF - return -1");
+                return (-1); //Cannot read anymore input
             }
-
-#endif
-            pTmpBufferPos = (int *) ((int)pTmpBufferPos + width);
             input = (char *) ((int)input + 4096);
-            //DEBUG("After Input [%p]\n", input);
-
         }
     }
 
-    free(pTmpBuffer);
     close(fd);
 
     DEBUG("sz=%d", sz);
@@ -665,11 +622,11 @@ int main(int argc, char * *argv)
     inBufs->secondFieldOffsetHeight[1] = 0;
 
     inBufs->planeDesc[1].memType = XDM_MEMTYPE_TILED16;
-    inBufs->planeDesc[1].bufSize.tileMem.width  = width / 2; /* UV interleaved width is same a Y */
+    inBufs->planeDesc[1].bufSize.tileMem.width  = width; /* UV interleaved width is same a Y */
     inBufs->planeDesc[1].bufSize.tileMem.height = height / 2;
 
     buf = calloc(sizeof(InputBuffer), 1);
-    DEBUG(" ----------------- create TILER buf 0x%x --------------------", (unsigned int)buf);
+    DEBUG(" ----------------- create INPUT TILER buf 0x%x --------------------", (unsigned int)buf);
     buf->buf = tiler_alloc(width, height);
     if( buf->buf ) {
         //buf->y     = TilerMem_VirtToPhys(buf->buf);
@@ -677,7 +634,7 @@ int main(int argc, char * *argv)
         //buf->uv  = TilerMem_VirtToPhys(buf->buf + (height * 4096));
         buf->uv  = (SSPtr)buf->buf + (height * 4096);
 
-        DEBUG("buf=%p, buf->buf=%p y=%08x, uv=%08x", buf, buf->buf, buf->y, buf->uv);
+        DEBUG("INPUT TILER buf=%p, buf->buf=%p y=%08x, uv=%08x", buf, buf->buf, buf->y, buf->uv);
     } else {
         ERROR(" ---------------- tiler_alloc failed --------------------");
         free(buf);
@@ -1218,25 +1175,6 @@ int main(int argc, char * *argv)
         //Read the NV12 frame to input buffer to be encoded.
         n = read_input(in_pattern, in_cnt, buf->buf);
 
-#ifdef DUMPINPUTDATA0
-        DEBUG("input data buf->buf[%p]", buf->buf);
-
-        //Dump the file
-        if( inputDump == NULL ) {
-            inputDump = fopen("/sd/dce_enc_dump/inputdump.yuv", "ab");
-            //DEBUG("input data dump file open %p errno %d", inputDump, errno);
-            if( inputDump == NULL ) {
-                DEBUG("Opening input Dump /sd/dce_enc_dump/inputdump.yuv file FAILED");
-            }
-        }
-        //DEBUG("input data dump file open %p Successful", inputDump);
-
-        fwrite(buf->buf, sizeof(char), 4096 * height * 3 / 2, inputDump);
-        DEBUG("Dumping input file of NV12 format with read data of %d inside buffersize = %d", n, 4096 * height * 3 / 2);
-        fflush(inputDump);
-        fclose(inputDump);
-        inputDump = NULL;
-#endif
 
         if( n && (n != -1)) {
             eof = 0;
