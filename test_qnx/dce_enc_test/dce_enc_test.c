@@ -426,7 +426,9 @@ int main(int argc, char * *argv)
     Engine_Error    ec;
     XDAS_Int32      err;
     char           *output = NULL;
+    char           *output_mvbuf =  NULL;
     int             output_size = 0;
+    int             mvbufinfo_size = 0;
     char           *in_pattern, *out_pattern;
     int             in_cnt = 0, out_cnt = 0;
     int             oned;
@@ -927,7 +929,7 @@ int main(int argc, char * *argv)
             mpeg4enc_params->enableSceneChangeAlgo = IMPEG4ENC_SCDA_DISABLE;
             mpeg4enc_params->useVOS = 0;
             mpeg4enc_params->enableMONA = 0;
-            mpeg4enc_params->enableAnalyticinfo = 0;
+            mpeg4enc_params->enableAnalyticinfo = -1;
             mpeg4enc_params->debugTraceLevel = 0;
             mpeg4enc_params->lastNFramesToLog = 0;
 
@@ -1161,10 +1163,11 @@ int main(int argc, char * *argv)
     // XDM_GETBUFINFO
     // Send Control cmd XDM_GETBUFINFO to get min output and output size
     err = VIDENC2_control(codec, XDM_GETBUFINFO, dynParams, status);
-    DEBUG("VIDENC2_control - XDM_GETBUFINFO err %d status numOutBuf %d OutBufSize %d", err, status->bufInfo.minNumOutBufs, status->bufInfo.minOutBufSize[0].bytes);
+    DEBUG("VIDENC2_control - XDM_GETBUFINFO err %d status numOutBuf %d OutBufSize %d MVBufInfo %d", err, status->bufInfo.minNumOutBufs, status->bufInfo.minOutBufSize[0].bytes, status->bufInfo.minOutBufSize[1].bytes);
 
     outBufs = dce_alloc(sizeof(XDM2_BufDesc));
     output_size = status->bufInfo.minOutBufSize[0].bytes;
+    mvbufinfo_size = status->bufInfo.minOutBufSize[1].bytes;
 
     DEBUG("Output allocate through tiler 1D");
     if( codec_switch == DCE_ENC_TEST_H264 ) {
@@ -1183,6 +1186,19 @@ int main(int argc, char * *argv)
     outBufs->descs[0].bufSize.bytes = output_size;
 
     DEBUG("outBufs->descs[0].buf %p output %p", outBufs->descs[0].buf, output);
+
+   if(mvbufinfo_size > 0){
+#ifdef NON_TILER_OUTPUT
+        output_mvbuf = output_allocate_nonTiler(mvbufinfo_size);
+#endif
+
+        output_mvbuf = tiler_alloc(mvbufinfo_size, 0);
+        outBufs->descs[1].buf = (XDAS_Int8 *)output_mvbuf;
+
+        outBufs->descs[1].memType = XDM_MEMTYPE_RAW;
+        outBufs->descs[1].bufSize.bytes = mvbufinfo_size;
+        DEBUG("MVBufInfo: outBufs->descs[1].buf %p output_mvbuf %p", outBufs->descs[1].buf, output_mvbuf);
+   }
 
 #ifdef DUMPINPUTDATA
     char          Buff1[100];
@@ -1519,9 +1535,17 @@ out:
     if( output ) {
         MemMgr_Free(output);
     }
+    if(output_mvbuf){
+        printf("\nFreeing output %p...\n", output_mvbuf);
+        MemMgr_Free(output_mvbuf);
+    }
 #ifdef NON_TILER_OUTPUT
     if( output ) {
         output_enc_free(output, output_size);
+    }
+    if(output_mvbuf){
+        printf("\nFreeing mvbuf output %p...\n", output_mvbuf);
+        output_enc_free(output_mvbuf, mvbufinfo_size);
     }
 #endif
 
