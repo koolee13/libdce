@@ -31,7 +31,7 @@ LOCAL_C_INCLUDES += \
     hardware/ti/ipc/packages/ti/ipc/mm
 
 LOCAL_SHARED_LIBRARIES := \
-    libipc \
+    libmmrpc \
     libc \
     libcutils \
     liblog \
