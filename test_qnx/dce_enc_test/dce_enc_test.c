@@ -50,6 +50,8 @@
 #include <ti/sdo/codecs/h264enc/ih264enc.h>
 #include <ti/sdo/codecs/mpeg4enc/impeg4enc.h>
 
+#include "ti/shmemallocator/SharedMemoryAllocatorUsr.h"
+
 
 #define OMAP5
 
@@ -69,11 +71,8 @@
 /* align x to next highest multiple of 2^n */
 #define ALIGN2(x, n)   (((x) + ((1 << (n)) - 1)) & ~((1 << (n)) - 1))
 
-// Profile the init and decode calls
+// Profile the init and encode calls
 //#define PROFILE_TIME
-
-// NON-TILER OUTPUT configuration
-//#define NON_TILER_OUTPUT
 
 enum {
     IVAHD_H264_ENCODE,
@@ -158,52 +157,7 @@ static void *tiler_alloc(int width, int height)
     return (bufPtr);
 }
 
-#ifdef NON_TILER_OUTPUT
-static XDAS_Int16
-get_mem_type (SSPtr paddr)
-{
-    if((0x60000000 <= paddr) && (paddr < 0x68000000)) {
-        return (XDM_MEMTYPE_TILED8);
-    }
-    if((0x68000000 <= paddr) && (paddr < 0x70000000)) {
-        return (XDM_MEMTYPE_TILED16);
-    }
-    if((0x70000000 <= paddr) && (paddr < 0x78000000)) {
-        return (XDM_MEMTYPE_TILED32);
-    }
-    if((0x78000000 <= paddr) && (paddr < 0x80000000)) {
-        return (XDM_MEMTYPE_RAW);
-    }
-    return (-1);
-}
-
-/*! @brief Start address of DDR region for 1GB RAM */
-#define DDR_1G_ADDRESS_START           0x80000000
-/*! @brief End address of DDR region for 1GB RAM */
-#define DDR_1G_ADDRESS_END             0xBFFFFFFF
-#define DDR_1G_DUCATI_OFFSET           0x40000000
-
-/*! @brief Start address of DDR region for 2GB RAM */
-#define DDR_2G_ADDRESS_START           0xC0000000
-/*! @brief End address of DDR region for 2GB RAM */
-#define DDR_2G_ADDRESS_END             0xFFFFFFFF
-#define DDR_2G_DUCATI_OFFSET           0xA0000000
-
-static Int
-SysLinkMemUtils_translateAddr (UInt32 physAddr)
-{
-    Int    ret = 0;
-
-    if( physAddr >= DDR_1G_ADDRESS_START && physAddr <= DDR_1G_ADDRESS_END ) {
-        ret = physAddr + DDR_1G_DUCATI_OFFSET;
-    } else if( physAddr >= DDR_2G_ADDRESS_START && physAddr <= DDR_2G_ADDRESS_END ) {
-        ret = physAddr - DDR_2G_DUCATI_OFFSET;
-    }
-
-    return (ret);
-}
-
-static void *output_allocate_nonTiler(int size)
+static int allocate_nonTiler(shm_buf* shmBuf, int size)
 {
     DEBUG(" ----------------- create nonTILER size %d --------------------", size);
 
@@ -212,38 +166,35 @@ static void *output_allocate_nonTiler(int size)
     int32_t     ret, len = 0;
     int64_t     paddr = 0;
 
-    vaddr = mmap64(0, size, PROT_NOCACHE | PROT_READ | PROT_WRITE, MAP_ANON | MAP_PHYS | MAP_SHARED, NOFD, 0);
-    if( vaddr == MAP_FAILED ) {
-        ERROR("Failed to do memory mapping\n");
-        return (NULL);
+    ret = SHM_alloc(size, shmBuf);
+    if( ret < 0 ) {
+        ERROR("Failed to alloc shmem buffer\n");
+        return (-ENOMEM);
     }
+    vaddr = (uint64_t *) shmBuf->vir_addr;
 
-    // Make sure the memory is contiguous
+    DEBUG("nonTILER shmBuf->vir_addr =%08x, shmBuf->phy_addr =%08x ", (unsigned int) shmBuf->vir_addr, (unsigned int) shmBuf->phy_addr);
+
     ret = mem_offset64(vaddr, NOFD, (size_t) size, &paddr, (size_t *) &len);
     if( ret ) {
         ERROR("Failed to check memory contiguous ret %d errno %d\n", ret, errno);
-        munmap(vaddr, size);
-        return (NULL);
+        SHM_release(shmBuf);
+        return (-ENOMEM);
     } else if( len != (size)) {
         ERROR("Failed to check len %d != %d\n", len, size);
-        munmap(vaddr, size);
-        return (NULL);
+        SHM_release(shmBuf);
+        return (-ENOMEM);
     }
 
-    DEBUG("nonTILER buf virtual address =%08x, paddr=%08x return %08x", vaddr, (unsigned int) TilerMem_VirtToPhys(vaddr), SysLinkMemUtils_translateAddr(TilerMem_VirtToPhys(vaddr)));
-
-    // TODO: For IPC 3.x we need to return the virtual address instead of the physical address.
-    // return (void*) vaddr;
-    return ((void *) SysLinkMemUtils_translateAddr(TilerMem_VirtToPhys(vaddr)));
-
+    DEBUG("shmBuf %p", shmBuf);
+    return 0;
 }
 
-static void output_enc_free(void *vaddr, int size)
+static void free_nonTiler(void *shmBuf)
 {
-    munmap(vaddr, size);
+    DEBUG("shmBuf %p", shmBuf);
+    SHM_release(shmBuf);
 }
-
-#endif
 
 /* ************************************************************************* */
 /* utilities to allocate/manage 2d input buffers */
@@ -377,13 +328,15 @@ uint64_t mark_microsecond(uint64_t *last)
 
 #endif
 
-/* decoder body */
+/* encoder body */
 int main(int argc, char * *argv)
 {
     Engine_Error    ec;
     XDAS_Int32      err;
     char           *output = NULL;
     char           *output_mvbuf =  NULL;
+    shm_buf         output_mvbuf_nonTiler;
+    shm_buf         output_nonTiler;
     int             output_size = 0;
     int             mvbufinfo_size = 0;
     char           *in_pattern, *out_pattern;
@@ -396,6 +349,7 @@ int main(int argc, char * *argv)
     int             eof = 0;
     int             ivahd_encode_type;
     char            vid_codec[10];
+    char            tilerbuffer[10];
     unsigned int    codec_switch = 0;
     int             bytesGenerated = 0;
     int             frames_to_write = 0;
@@ -424,11 +378,11 @@ int main(int argc, char * *argv)
         oned = FALSE;
     }
 
-    if( argc != 9 ) {
-        printf("usage:   %s width height frames_to_write inpattern outpattern codec baseline/high level\n", argv[0]);
-        printf("example: %s 1920 1088 300 in.yuv out.h264 h264 baseline 10\n", argv[0]);
-        printf("example: %s 176 144 300 in.yuv out.m4v mpeg4 simple/baseline 0\n", argv[0]);
-        printf("example: %s 176 144 300 in.yuv out.m4v h263 simple/baseline 0\n", argv[0]);
+    if( argc != 10 ) {
+        printf("usage:   %s width height frames_to_write inpattern outpattern codec baseline/high level buffertype\n", argv[0]);
+        printf("example: %s 1920 1088 300 in.yuv out.h264 h264 baseline 10 tiler\n", argv[0]);
+        printf("example: %s 176 144 300 in.yuv out.m4v mpeg4 simple/baseline 0 non-tiler\n", argv[0]);
+        printf("example: %s 176 144 300 in.yuv out.m4v h263 simple/baseline 0 tiler\n", argv[0]);
         printf("Currently supported codecs: h264 or mpeg4 or h263\n");
         printf("Run this command for help on the use case: use dce_enc_test\n");
         return (1);
@@ -442,14 +396,20 @@ int main(int argc, char * *argv)
     strcpy(vid_codec, argv[6]);
     strcpy(profile, argv[7]);
     level = atoi(argv[8]);
+    strcpy(tilerbuffer, argv[9]);
 
     printf("Selected codec: %s\n", vid_codec);
+    printf("Selected buffer: %s\n", tilerbuffer);
 
     enum {
         DCE_ENC_TEST_H264  = 1,
         DCE_ENC_TEST_MPEG4 = 2,
         DCE_ENC_TEST_H263 = 3
     };
+
+/*
+ * Configuration based on the input parameters
+ */
 
     if((!(strcmp(vid_codec, "h264")))) {
         ivahd_encode_type = IVAHD_H264_ENCODE;
@@ -576,6 +536,9 @@ int main(int argc, char * *argv)
 
     DEBUG("Engine_open successful engine=%p", engine);
 
+/*
+ * inBufs handling
+ */
     DEBUG("input buffer configuration width %d height %d", width, height);
     inBufs = dce_alloc(sizeof(IVIDEO2_BufDesc));
 
@@ -593,14 +556,6 @@ int main(int argc, char * *argv)
 
     inBufs->topFieldFirstFlag = 0; //Only valid for interlace content.
     inBufs->contentType = IVIDEO_PROGRESSIVE;
-
-    // NOTE: FOR INTERLACED.
-    // For contentType = IVIDEO_INTERLACED
-    // inBufs->contentType = IVIDEO_INTERLACED;
-    // inBufs->dataLayout = IVIDEO_FIELD_SEPARATED;
-    // if stereoInfoPreset == IH264_STEREOINFO_DISABLE then
-    // inBufs->activeFrameRegion.bottomRight.y = height / 2;
-    // inBufs->imageRegion.bottomRight.y = height / 2;
 
     inBufs->activeFrameRegion.topLeft.x = 0;
     inBufs->activeFrameRegion.topLeft.y = 0;
@@ -625,13 +580,12 @@ int main(int argc, char * *argv)
     inBufs->planeDesc[1].bufSize.tileMem.width  = width; /* UV interleaved width is same a Y */
     inBufs->planeDesc[1].bufSize.tileMem.height = height / 2;
 
+    // INPUT BUFFER MUST BE TILED NV12. Encoder codec doesn't support non TILED input buffer.
     buf = calloc(sizeof(InputBuffer), 1);
     DEBUG(" ----------------- create INPUT TILER buf 0x%x --------------------", (unsigned int)buf);
     buf->buf = tiler_alloc(width, height);
     if( buf->buf ) {
-        //buf->y     = TilerMem_VirtToPhys(buf->buf);
         buf->y   = (SSPtr)buf->buf;
-        //buf->uv  = TilerMem_VirtToPhys(buf->buf + (height * 4096));
         buf->uv  = (SSPtr)buf->buf + (height * 4096);
 
         DEBUG("INPUT TILER buf=%p, buf->buf=%p y=%08x, uv=%08x", buf, buf->buf, buf->y, buf->uv);
@@ -647,6 +601,9 @@ int main(int argc, char * *argv)
 
     DEBUG("input buffer configuration num_buffers %d width %d height %d", num_buffers, width, height);
 
+/*
+ * inArgs and outArgs configuration for static parameter passed during codec creation.
+ */
     switch( codec_switch ) {
         case DCE_ENC_TEST_H264 :
             inArgs = dce_alloc(sizeof(IH264ENC_InArgs));
@@ -944,6 +901,9 @@ int main(int argc, char * *argv)
 
     DEBUG("VIDENC2_create successful codec=%p", codec);
 
+/*
+ * inArgs and outArgs configuration for dynamic parameter passed during codec control.
+ */
     switch( codec_switch ) {
         case DCE_ENC_TEST_H264 :
             dynParams = dce_alloc(sizeof(IH264ENC_DynamicParams));
@@ -1122,40 +1082,60 @@ int main(int argc, char * *argv)
     err = VIDENC2_control(codec, XDM_GETBUFINFO, dynParams, status);
     DEBUG("VIDENC2_control - XDM_GETBUFINFO err %d status numOutBuf %d OutBufSize %d MVBufInfo %d", err, status->bufInfo.minNumOutBufs, status->bufInfo.minOutBufSize[0].bytes, status->bufInfo.minOutBufSize[1].bytes);
 
+/*
+ * outBufs handling
+ */
     outBufs = dce_alloc(sizeof(XDM2_BufDesc));
     output_size = status->bufInfo.minOutBufSize[0].bytes;
     mvbufinfo_size = status->bufInfo.minOutBufSize[1].bytes;
 
-    DEBUG("Output allocate through tiler 1D");
-    if( codec_switch == DCE_ENC_TEST_H264 ) {
+    if (codec_switch == DCE_ENC_TEST_H264) {
         outBufs->numBufs = status->bufInfo.minNumOutBufs;          // this value is 1
     } else if( codec_switch == DCE_ENC_TEST_MPEG4 || codec_switch == DCE_ENC_TEST_H263 ) {
         outBufs->numBufs = 1;
     }
-    output = tiler_alloc(output_size, 0);
-#ifdef NON_TILER_OUTPUT
-    output = output_allocate_nonTiler(output_size);
-#endif
-    //outBufs->descs[0].buf = (XDAS_Int8 *)TilerMem_VirtToPhys(output);
-    outBufs->descs[0].buf = (XDAS_Int8 *)output;
 
+    if( !(strcmp(tilerbuffer, "tiler"))) {
+        DEBUG("Output allocate through TILER 1D");
+        tiler = 1;
+        output = tiler_alloc(output_size, 0);
+
+    } else {
+        DEBUG("Output allocate through NON-TILER");
+        tiler = 0;
+        err = allocate_nonTiler(&output_nonTiler, output_size);
+        if( err < 0 ) {
+            ERROR("fail: %d", err);
+            goto shutdown;
+        }
+        output = (char*) output_nonTiler.vir_addr;
+    }
+
+    outBufs->descs[0].buf = (XDAS_Int8 *)output;
     outBufs->descs[0].memType = XDM_MEMTYPE_RAW;
     outBufs->descs[0].bufSize.bytes = output_size;
 
-    DEBUG("outBufs->descs[0].buf %p output %p", outBufs->descs[0].buf, output);
+    DEBUG("Is TILER %d outBufs->descs[0].buf %p output %p output_nonTiler %p mvbufinfo_size %d", tiler, outBufs->descs[0].buf, output, &output_nonTiler, mvbufinfo_size);
 
-   if(mvbufinfo_size > 0){
-#ifdef NON_TILER_OUTPUT
-        output_mvbuf = output_allocate_nonTiler(mvbufinfo_size);
-#endif
-
-        output_mvbuf = tiler_alloc(mvbufinfo_size, 0);
+    if (mvbufinfo_size > 0) {
+        if (tiler) {
+            output_mvbuf = tiler_alloc(mvbufinfo_size, 0);
+            DEBUG("MVBufInfo: TILER outBufs->descs[1].buf %p output_mvbuf %p", outBufs->descs[1].buf, output_mvbuf);
+        }
+        else {
+            err = allocate_nonTiler(&output_mvbuf_nonTiler, mvbufinfo_size);
+            if( err < 0 ) {
+                ERROR("fail: %d", err);
+                goto shutdown;
+            }
+            output_mvbuf = (char*) output_mvbuf_nonTiler.vir_addr;
+            DEBUG("MVBufInfo: NON-TILER outBufs->descs[1].buf %p output_mvbuf %p", outBufs->descs[1].buf, output_mvbuf);
+        }
         outBufs->descs[1].buf = (XDAS_Int8 *)output_mvbuf;
-
         outBufs->descs[1].memType = XDM_MEMTYPE_RAW;
         outBufs->descs[1].bufSize.bytes = mvbufinfo_size;
-        DEBUG("MVBufInfo: outBufs->descs[1].buf %p output_mvbuf %p", outBufs->descs[1].buf, output_mvbuf);
    }
+    DEBUG("output_mvbuf %p output_mvbuf_nonTiler %p", output_mvbuf, &output_mvbuf_nonTiler);
 
 #ifdef DUMPINPUTDATA
     char          Buff1[100];
@@ -1167,14 +1147,15 @@ int main(int argc, char * *argv)
     INFO("total_init_time %llu output_alloc_time %llu actual init time in: %lld us", total_init_time, output_alloc_time, total_init_time  - output_alloc_time);
 #endif
 
-    // Handling codec_config
+/*
+ * codec process
+ */
     while( inBufs->numPlanes && outBufs->numBufs ) {
         int    n;
         DEBUG("Looping on reading input inBufs->numPlanes %d outBufs->numBufs %d", inBufs->numPlanes, outBufs->numBufs);
 
         //Read the NV12 frame to input buffer to be encoded.
         n = read_input(in_pattern, in_cnt, buf->buf);
-
 
         if( n && (n != -1)) {
             eof = 0;
@@ -1230,7 +1211,9 @@ int main(int argc, char * *argv)
             } else if( codec_switch == DCE_ENC_TEST_MPEG4 || codec_switch == DCE_ENC_TEST_H263 ) {
                 mpeg4enc_inArgs = (IMPEG4ENC_InArgs *) inArgs;
             }
+            inBufs->planeDesc[0].buf = NULL;
             inBufs->planeDesc[0].bufSize.bytes = 0;
+            inBufs->planeDesc[1].buf = NULL;
             inBufs->planeDesc[1].bufSize.bytes = 0;
             outBufs->descs[0].buf = NULL;
             outBufs->descs[1].buf = NULL;
@@ -1267,10 +1250,11 @@ int main(int argc, char * *argv)
             } else if( codec_switch == DCE_ENC_TEST_MPEG4 || codec_switch == DCE_ENC_TEST_H263 ) {
                 mpeg4enc_inArgs = (IMPEG4ENC_InArgs *) inArgs;
             }
+            inBufs->planeDesc[0].buf = NULL;
             inBufs->planeDesc[0].bufSize.bytes = 0;
+            inBufs->planeDesc[1].buf = NULL;
             inBufs->planeDesc[1].bufSize.bytes = 0;
             outBufs->descs[0].buf = NULL;
-            outBufs->descs[1].buf = NULL;
         }
 
 #ifdef DUMPINPUTDATA
@@ -1322,10 +1306,6 @@ int main(int argc, char * *argv)
 
 #ifdef PROFILE_TIME
             codec_process_time = mark_microsecond(NULL);
-#endif
-
-#if 0
-            err = VIDENC2_process(codec, inBufs, outBufs, inArgs, outArgs);
 #endif
 
             if( codec_switch == DCE_ENC_TEST_H264 ) {
@@ -1469,23 +1449,27 @@ out:
         dce_free(outArgs);
     }
 
-    printf("\nFreeing output %p...\n", output);
-    if( output ) {
-        MemMgr_Free(output);
+    printf("\nFreeing output %p... output_mvbuf %p...\n", output, output_mvbuf);
+    if (tiler) {
+        if( output ) {
+            MemMgr_Free(output);
+        }
+
+        if( output_mvbuf ){
+            printf("\nFreeing output %p...\n", output_mvbuf);
+            MemMgr_Free(output_mvbuf);
+        }
     }
-    if(output_mvbuf){
-        printf("\nFreeing output %p...\n", output_mvbuf);
-        MemMgr_Free(output_mvbuf);
+    else {
+        if( output ) {
+            printf("\nFreeing output_nonTiler %p...\n", &output_nonTiler);
+            free_nonTiler(&output_nonTiler);
+        }
+        if( output_mvbuf ){
+            printf("\nFreeing output_mvbuf_nonTiler %p...\n", &output_mvbuf_nonTiler);
+            free_nonTiler(&output_mvbuf_nonTiler);
+        }
     }
-#ifdef NON_TILER_OUTPUT
-    if( output ) {
-        output_enc_free(output, output_size);
-    }
-    if(output_mvbuf){
-        printf("\nFreeing mvbuf output %p...\n", output_mvbuf);
-        output_enc_free(output_mvbuf, mvbufinfo_size);
-    }
-#endif
 
     printf("\nFreeing buf %p...\n", buf);
     if( buf ) {
