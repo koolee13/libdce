@@ -48,11 +48,12 @@
 
 /********************* GLOBALS ***********************/
 /* Hande used for Remote Communication                               */
-MmRpc_Handle    MmRpcHandle = NULL;
+MmRpc_Handle    MmRpcHandle[MAX_REMOTEDEVICES] = { NULL};
+Engine_Handle   gEngineHandle[MAX_INSTANCES][MAX_REMOTEDEVICES] = { NULL};
 static pthread_mutex_t    mutex = PTHREAD_MUTEX_INITIALIZER;
-static int      __ClientCount = 0;
+static int      __ClientCount[MAX_REMOTEDEVICES] = {0};
 int             dce_debug = DCE_DEBUG_LEVEL;
-
+const String DCE_DEVICE_NAME[MAX_REMOTEDEVICES]= {"rpmsg-dce","rpmsg-dce-dsp"};
 /****************** INLINE FUNCTIONS ********************/
 
 static inline void Fill_MmRpc_fxnCtx(MmRpc_FxnCtx *fxnCtx, int fxn_id, int num_params, int num_xlts, MmRpc_Xlt *xltAry)
@@ -110,32 +111,73 @@ void dce_free(void *ptr)
     memplugin_free(ptr);
 }
 
+static int __inline getCoreIndexFromName(String name)
+{
+  if(name == NULL)
+     return INVALID_CORE;
+
+  if(!strcmp(name,"ivahd_vidsvr"))
+      return IPU;
+  else if(!strcmp(name, "dsp_vidsvr"))
+      return DSP;
+  else
+     return INVALID_CORE;
+}
+
+static int __inline getCoreIndexFromCodec(int codec_id)
+{
+   if(codec_id == OMAP_DCE_VIDENC2 || codec_id == OMAP_DCE_VIDDEC3)
+       return IPU;
+   else if(codec_id == OMAP_DCE_VIDDEC2)
+       return DSP;
+   else
+      return INVALID_CORE;
+}
+static int __inline getCoreIndexFromEngine(Engine_Handle engine)
+{
+    int i;
+    int core = INVALID_CORE;
+
+    for(i = 0; i < MAX_INSTANCES ; i++){
+        if(engine == gEngineHandle[i][IPU]){
+            core = IPU;
+            break;
+        }
+        else if(engine == gEngineHandle[i][DSP]){
+            core = DSP;
+            break;
+        }
+     }
+     return core;
+}
 /*=====================================================================================*/
 /** dce_ipc_init            : Initialize MmRpc. This function is called within Engine_open().
  *
  * @ return                 : Error Status.
  */
-static int dce_ipc_init(void)
+static int dce_ipc_init(int core)
 {
     MmRpc_Params        args;
     dce_error_status    eError = DCE_EOK;
 
     DEBUG(" >> dce_ipc_init\n");
 
-    __ClientCount++;
-    /* Check if already Initialized */
-    if (__ClientCount > 1) {
-        goto EXIT;
-    }
-
     /* Create remote server insance */
+     __ClientCount[core]++;
+
+     if(__ClientCount[core] > MAX_INSTANCES){
+        eError = DCE_EXDM_UNSUPPORTED;
+        return eError;
+     }
+     if(__ClientCount[core] > 1){
+         goto EXIT;
+      }
+
     MmRpc_Params_init(&args);
 
-    eError = MmRpc_create(DCE_DEVICE_NAME, &args, &MmRpcHandle);
-
-    _ASSERT_AND_EXECUTE(eError == DCE_EOK, DCE_EIPC_CREATE_FAIL, __ClientCount--);
-
-    DEBUG("open(/dev/" DCE_DEVICE_NAME ") -> 0x%x\n", (int)MmRpcHandle);
+    eError = MmRpc_create(DCE_DEVICE_NAME[core], &args, &MmRpcHandle[core]);
+    _ASSERT_AND_EXECUTE(eError == DCE_EOK, DCE_EIPC_CREATE_FAIL, __ClientCount[core]--);
+    DEBUG("open(/dev/%s]) -> 0x%x\n",DCE_DEVICE_NAME[core], (int)MmRpcHandle[core]);
 
 EXIT:
     return (eError);
@@ -145,18 +187,17 @@ EXIT:
 /** dce_ipc_deinit            : DeInitialize MmRpc. This function is called within
  *                              Engine_close().
  */
-static void dce_ipc_deinit()
+static void dce_ipc_deinit(int core)
 {
-    __ClientCount--;
-    if( __ClientCount > 0 ) {
+    __ClientCount[core]--;
+    if( __ClientCount[core] > 0 ) {
         goto EXIT;
-    }
+     }
 
-    if( MmRpcHandle != NULL ) {
-        MmRpc_delete(&MmRpcHandle);
-    }
-    MmRpcHandle = NULL;
-
+    if( MmRpcHandle[core] != NULL ) {
+        MmRpc_delete(&MmRpcHandle[core]);
+        MmRpcHandle[core] = NULL;
+     }
 EXIT:
     return;
 }
@@ -177,13 +218,15 @@ Engine_Handle Engine_open(String name, Engine_Attrs *attrs, Engine_Error *ec)
     dce_engine_open    *engine_open_msg = NULL;
     Engine_Attrs       *engine_attrs = NULL;
     Engine_Handle       engine_handle = NULL;
+    int                 coreIdx   = INVALID_CORE;
 
     _ASSERT(name != '\0', DCE_EINVALID_INPUT);
 
     pthread_mutex_lock(&mutex);
-
+    coreIdx = getCoreIndexFromName(name);
+    _ASSERT(coreIdx != INVALID_CORE, DCE_EINVALID_INPUT);
     /* Initialize IPC. In case of Error Deinitialize them */
-    _ASSERT(dce_ipc_init() == DCE_EOK, DCE_EIPC_CREATE_FAIL);
+    _ASSERT(dce_ipc_init(coreIdx) == DCE_EOK, DCE_EIPC_CREATE_FAIL);
 
     INFO(">> Engine_open Params::name = %s size = %d\n", name, strlen(name));
     /* Allocate Shared memory for the engine_open rpc msg structure*/
@@ -207,9 +250,10 @@ Engine_Handle Engine_open(String name, Engine_Attrs *attrs, Engine_Error *ec)
                                     sizeof(MemHeader), memplugin_share(engine_open_msg));
 
     /* Invoke the Remote function through MmRpc */
-    eError = MmRpc_call(MmRpcHandle, &fxnCtx, (int32_t *)(&engine_handle));
+    eError = MmRpc_call(MmRpcHandle[coreIdx], &fxnCtx, (int32_t *)(&engine_handle));
+    gEngineHandle[__ClientCount[coreIdx] - 1][coreIdx] = engine_handle;
 
-    /* In case of Error, the Application will get a NULL Engine Handle */
+        /* In case of Error, the Application will get a NULL Engine Handle */
     _ASSERT_AND_EXECUTE(eError == DCE_EOK, DCE_EIPC_CALL_FAIL, engine_handle = NULL);
 
     if( ec ) {
@@ -237,8 +281,9 @@ Void Engine_close(Engine_Handle engine)
     MmRpc_FxnCtx        fxnCtx;
     int32_t             fxnRet;
     dce_error_status    eError = DCE_EOK;
+    int32_t             coreIdx = INVALID_CORE;
 
-    pthread_mutex_lock(&mutex);
+     pthread_mutex_lock(&mutex);
 
     _ASSERT(engine != NULL, DCE_EINVALID_INPUT);
 
@@ -246,13 +291,15 @@ Void Engine_close(Engine_Handle engine)
     Fill_MmRpc_fxnCtx(&fxnCtx, DCE_RPC_ENGINE_CLOSE, 1, 0, NULL);
     Fill_MmRpc_fxnCtx_Scalar_Params(fxnCtx.params, sizeof(Engine_Handle), (int32_t)engine);
 
-    /* Invoke the Remote function through MmRpc */
-    eError = MmRpc_call(MmRpcHandle, &fxnCtx, &fxnRet);
+    coreIdx = getCoreIndexFromEngine(engine);
+    _ASSERT(coreIdx != INVALID_CORE,DCE_EINVALID_INPUT);
 
+    /* Invoke the Remote function through MmRpc */
+     eError = MmRpc_call(MmRpcHandle[coreIdx], &fxnCtx, &fxnRet);
     _ASSERT(eError == DCE_EOK, DCE_EIPC_CALL_FAIL);
 
 EXIT:
-    dce_ipc_deinit();
+    dce_ipc_deinit(coreIdx);
 
     pthread_mutex_unlock(&mutex);
 
@@ -279,6 +326,7 @@ static void *create(Engine_Handle engine, String name, void *params, dce_codec_t
     dce_error_status    eError = DCE_EOK;
     void               *codec_handle = NULL;
     char               *codec_name = NULL;
+    int                coreIdx = INVALID_CORE;
 
     _ASSERT(name != '\0', DCE_EINVALID_INPUT);
     _ASSERT(engine != NULL, DCE_EINVALID_INPUT);
@@ -299,8 +347,9 @@ static void *create(Engine_Handle engine, String name, void *params, dce_codec_t
     Fill_MmRpc_fxnCtx_OffPtr_Params(&(fxnCtx.params[3]), GetSz(params), P2H(params),
                                     sizeof(MemHeader),  memplugin_share(params));
     /* Invoke the Remote function through MmRpc */
-    eError = MmRpc_call(MmRpcHandle, &fxnCtx, (int32_t *)(&codec_handle));
-
+    coreIdx = getCoreIndexFromCodec(codec_id);
+    _ASSERT(coreIdx != INVALID_CORE, DCE_EINVALID_INPUT);
+    eError = MmRpc_call(MmRpcHandle[coreIdx], &fxnCtx, (int32_t *)(&codec_handle));
     /* In case of Error, the Application will get a NULL Codec Handle */
     _ASSERT_AND_EXECUTE(eError == DCE_EOK, DCE_EIPC_CALL_FAIL, codec_handle = NULL);
 
@@ -329,6 +378,7 @@ static XDAS_Int32 control(void *codec, int id, void *dynParams, void *status, dc
     MmRpc_FxnCtx        fxnCtx;
     int32_t             fxnRet;
     dce_error_status    eError = DCE_EOK;
+    int                 coreIdx = INVALID_CORE;
 
     _ASSERT(codec != NULL, DCE_EINVALID_INPUT);
     _ASSERT(dynParams != NULL, DCE_EINVALID_INPUT);
@@ -345,7 +395,9 @@ static XDAS_Int32 control(void *codec, int id, void *dynParams, void *status, dc
                                     sizeof(MemHeader), memplugin_share(status));
 
     /* Invoke the Remote function through MmRpc */
-    eError = MmRpc_call(MmRpcHandle, &fxnCtx, &fxnRet);
+    coreIdx = getCoreIndexFromCodec(codec_id);
+    _ASSERT(coreIdx != INVALID_CORE, DCE_EINVALID_INPUT);
+    eError = MmRpc_call(MmRpcHandle[coreIdx], &fxnCtx, &fxnRet);
 
     _ASSERT(eError == DCE_EOK, DCE_EIPC_CALL_FAIL);
 
@@ -378,6 +430,7 @@ static XDAS_Int32 get_version(void *codec, void *dynParams, void *status, dce_co
     void             * *version_buf = NULL;
     int32_t             fxnRet;
     dce_error_status    eError = DCE_EOK;
+    int                 coreIdx = INVALID_CORE;
 
     _ASSERT(codec != NULL, DCE_EINVALID_INPUT);
     _ASSERT(dynParams != NULL, DCE_EINVALID_INPUT);
@@ -387,6 +440,8 @@ static XDAS_Int32 get_version(void *codec, void *dynParams, void *status, dce_co
         version_buf = (void * *)(&(((IVIDDEC3_Status *)status)->data.buf));
     } else if( codec_id == OMAP_DCE_VIDENC2 ) {
         version_buf = (void * *)(&(((IVIDENC2_Status *)status)->data.buf));
+    }else if( codec_id == OMAP_DCE_VIDDEC2 ) {
+        version_buf = (void * *)(&(((IVIDDEC2_Status *)status)->data.buf));
     }
     _ASSERT(*version_buf != NULL, DCE_EINVALID_INPUT);
 
@@ -400,10 +455,14 @@ static XDAS_Int32 get_version(void *codec, void *dynParams, void *status, dce_co
                                     sizeof(MemHeader), memplugin_share(status));
 
     /* Address Translation needed for buffer for version Info */
-    Fill_MmRpc_fxnCtx_Xlt_Array(fxnCtx.xltAry, 3, MmRpc_OFFSET((int32_t)status, (int32_t)version_buf), (size_t)P2H(*version_buf), memplugin_share(*version_buf));
+    Fill_MmRpc_fxnCtx_Xlt_Array(fxnCtx.xltAry, 3,
+        MmRpc_OFFSET((int32_t)status, (int32_t)version_buf),
+        (size_t)P2H(*version_buf), memplugin_share(*version_buf));
 
     /* Invoke the Remote function through MmRpc */
-    eError = MmRpc_call(MmRpcHandle, &fxnCtx, &fxnRet);
+    coreIdx = getCoreIndexFromCodec(codec_id);
+    _ASSERT(coreIdx != INVALID_CORE, DCE_EINVALID_INPUT);
+    eError = MmRpc_call(MmRpcHandle[coreIdx], &fxnCtx, &fxnRet);
 
     _ASSERT(eError == DCE_EOK, DCE_EIPC_CALL_FAIL);
 
@@ -417,7 +476,8 @@ typedef enum process_call_params {
     INBUFS_INDEX,
     OUTBUFS_INDEX,
     INARGS_INDEX,
-    OUTARGS_INDEX
+    OUTARGS_INDEX,
+    OUTBUFS_PTR_INDEX
 } process_call_params;
 
 #define LUMA_BUF 0
@@ -441,10 +501,14 @@ static XDAS_Int32 process(void *codec, void *inBufs, void *outBufs,
                           void *inArgs, void *outArgs, dce_codec_type codec_id)
 {
     MmRpc_FxnCtx        fxnCtx;
-    MmRpc_Xlt           xltAry[MAX_TOTAl_BUF];
+    MmRpc_Xlt           xltAry[MAX_TOTAL_BUF];
     int                 fxnRet, count, total_count, numInBufs = 0, numOutBufs = 0;
     dce_error_status    eError = DCE_EOK;
-    void             * *data_buf = NULL;
+    void             **data_buf = NULL;
+    void             **buf_arry = NULL;
+    void             **bufSize_arry = NULL;
+    int              numXltAry, numParams;
+    int              coreIdx = INVALID_CORE;
 
 #ifdef BUILDOS_ANDROID
     int32_t    inbuf_offset[MAX_INPUT_BUF];
@@ -459,14 +523,28 @@ static XDAS_Int32 process(void *codec, void *inBufs, void *outBufs,
     if( codec_id == OMAP_DCE_VIDDEC3 ) {
         numInBufs = ((XDM2_BufDesc *)inBufs)->numBufs;
         numOutBufs = ((XDM2_BufDesc *)outBufs)->numBufs;
+        numXltAry = numInBufs + numOutBufs;
+        numParams = 6;
     } else if( codec_id == OMAP_DCE_VIDENC2 ) {
         numInBufs = ((IVIDEO2_BufDesc *)inBufs)->numPlanes;
         numOutBufs = ((XDM2_BufDesc *)outBufs)->numBufs;
+        numXltAry = numInBufs + numOutBufs;
+        numParams = 6;
+    }else if( codec_id == OMAP_DCE_VIDDEC2 ) {
+        numInBufs = ((XDM1_BufDesc *)inBufs)->numBufs;
+        numOutBufs = ((XDM_BufDesc *)outBufs)->numBufs;
+        numXltAry = numInBufs + numOutBufs + MAX_OUTPUT_BUFPTRS;/* 2 extra needed for bufs and bufSizes */
+        numParams = 7;
     }
+    else{
+         eError = DCE_EXDM_UNSUPPORTED;
+         return eError;
+    }
+
 
     /* marshall function arguments into the send buffer                       */
     /* Approach [2] as explained in "Notes" used for process               */
-    Fill_MmRpc_fxnCtx(&fxnCtx, DCE_RPC_CODEC_PROCESS, 6, numInBufs + numOutBufs, xltAry);
+    Fill_MmRpc_fxnCtx(&fxnCtx, DCE_RPC_CODEC_PROCESS, numParams, numXltAry, xltAry);
     Fill_MmRpc_fxnCtx_Scalar_Params(&(fxnCtx.params[CODEC_ID_INDEX]), sizeof(int32_t), codec_id);
     Fill_MmRpc_fxnCtx_Scalar_Params(&(fxnCtx.params[CODEC_HANDLE_INDEX]), sizeof(int32_t), (int32_t)codec);
 
@@ -490,34 +568,60 @@ static XDAS_Int32 process(void *codec, void *inBufs, void *outBufs,
             /* for the actual data. the offset within the input buffer is provided   */
             /* via memheader offset field. Hence the buf ptr needs to be advanced with the offset   */
             inbuf_offset[count] = P2H(*data_buf)->offset;
-            Fill_MmRpc_fxnCtx_Xlt_Array(&(fxnCtx.xltAry[total_count]), INBUFS_INDEX, MmRpc_OFFSET((int32_t)inBufs, (int32_t)data_buf),
-                                        (size_t)P2H(*data_buf), (size_t)memplugin_share((void *)*data_buf));
+            Fill_MmRpc_fxnCtx_Xlt_Array(&(fxnCtx.xltAry[total_count]), INBUFS_INDEX,
+                 MmRpc_OFFSET((int32_t)inBufs, (int32_t)data_buf),(size_t)P2H(*data_buf),
+                 (size_t)memplugin_share((void *)*data_buf));
+
             *data_buf += inbuf_offset[count];
 #else
-            Fill_MmRpc_fxnCtx_Xlt_Array(&(fxnCtx.xltAry[total_count]), INBUFS_INDEX, MmRpc_OFFSET((int32_t)inBufs, (int32_t)data_buf),
-                                        (size_t)*data_buf, (size_t)*data_buf);
+            Fill_MmRpc_fxnCtx_Xlt_Array(&(fxnCtx.xltAry[total_count]), INBUFS_INDEX,
+                  MmRpc_OFFSET((int32_t)inBufs, (int32_t)data_buf),
+                  (size_t)*data_buf, (size_t)*data_buf);
 #endif
         } else if( codec_id == OMAP_DCE_VIDENC2 ) {
             data_buf = (void * *)(&(((IVIDEO2_BufDesc *)inBufs)->planeDesc[count].buf));
-            Fill_MmRpc_fxnCtx_Xlt_Array(&(fxnCtx.xltAry[total_count]), INBUFS_INDEX, MmRpc_OFFSET((int32_t)inBufs, (int32_t)data_buf),
-                                        (size_t)*data_buf, (size_t)*data_buf);
+            Fill_MmRpc_fxnCtx_Xlt_Array(&(fxnCtx.xltAry[total_count]), INBUFS_INDEX,
+                MmRpc_OFFSET((int32_t)inBufs, (int32_t)data_buf),
+                (size_t)*data_buf, (size_t)*data_buf);
+
+        } else if( codec_id == OMAP_DCE_VIDDEC2 ) {
+            data_buf = (void * *)(&(((XDM1_BufDesc *)inBufs)->descs[count].buf));
+#ifdef BUILDOS_ANDROID
+            /* the decoder input buffer filled by the parsers, have an offset       */
+            /* for the actual data. the offset within the input buffer is provided   */
+            /* via memheader offset field. Hence the buf ptr needs to be advanced with the offset   */
+            inbuf_offset[count] = P2H(*data_buf)->offset;
+            Fill_MmRpc_fxnCtx_Xlt_Array(&(fxnCtx.xltAry[total_count]), INBUFS_INDEX,
+                MmRpc_OFFSET((int32_t)inBufs, (int32_t)data_buf),(size_t)P2H(*data_buf),
+                (size_t)memplugin_share((void *)*data_buf));
+
+            *data_buf += inbuf_offset[count];
+#else
+            Fill_MmRpc_fxnCtx_Xlt_Array(&(fxnCtx.xltAry[total_count]), INBUFS_INDEX,
+                MmRpc_OFFSET((int32_t)inBufs, (int32_t)data_buf),
+                (size_t)*data_buf, (size_t)*data_buf);
+#endif
         }
-    }
+}
 
     /* Output Buffers */
     for( count = 0; count < numOutBufs; count++, total_count++ ) {
+      if(codec_id == OMAP_DCE_VIDENC2 || codec_id == OMAP_DCE_VIDDEC3) {
         if(((XDM2_BufDesc *)outBufs)->descs[LUMA_BUF].buf != ((XDM2_BufDesc *)outBufs)->descs[CHROMA_BUF].buf ) {
             /* Either Encode usecase or MultiPlanar Buffers for Decode usecase */
             data_buf = (void * *)(&(((XDM2_BufDesc *)outBufs)->descs[count].buf));
-            Fill_MmRpc_fxnCtx_Xlt_Array(&(fxnCtx.xltAry[total_count]), OUTBUFS_INDEX, MmRpc_OFFSET((int32_t)outBufs, (int32_t)data_buf),
-                                        (size_t)*data_buf, (size_t)*data_buf);
+            Fill_MmRpc_fxnCtx_Xlt_Array(&(fxnCtx.xltAry[total_count]), OUTBUFS_INDEX,
+                 MmRpc_OFFSET((int32_t)outBufs, (int32_t)data_buf),
+                 (size_t)*data_buf, (size_t)*data_buf);
         }
 #if defined(BUILDOS_LINUX) || defined(BUILDOS_ANDROID)
         else {
             /* SinglePlanar Buffers for Decode usecase*/
             data_buf = (void * *)(&(((XDM2_BufDesc *)outBufs)->descs[count].buf));
-            Fill_MmRpc_fxnCtx_Xlt_Array(&(fxnCtx.xltAry[total_count]), OUTBUFS_INDEX, MmRpc_OFFSET((int32_t)outBufs, (int32_t)data_buf),
-                                        (size_t)*data_buf, (size_t)*data_buf);
+            Fill_MmRpc_fxnCtx_Xlt_Array(&(fxnCtx.xltAry[total_count]), OUTBUFS_INDEX,
+                 MmRpc_OFFSET((int32_t)outBufs, (int32_t)data_buf),
+                 (size_t)*data_buf, (size_t)*data_buf);
+
             if( count == CHROMA_BUF ) {
                 if(((XDM2_BufDesc *)outBufs)->descs[count].memType == XDM_MEMTYPE_RAW ||
                    ((XDM2_BufDesc *)outBufs)->descs[count].memType == XDM_MEMTYPE_TILEDPAGE ) {
@@ -529,10 +633,40 @@ static XDAS_Int32 process(void *codec, void *inBufs, void *outBufs,
             }
         }
 #endif
-    }
+    }else if(codec_id == OMAP_DCE_VIDDEC2) {
+             if(count == LUMA_BUF) {
+                 buf_arry = (void * *)(&(((XDM_BufDesc *)outBufs)->bufs));
 
+                 Fill_MmRpc_fxnCtx_Xlt_Array(&(fxnCtx.xltAry[total_count]), OUTBUFS_INDEX,
+                      MmRpc_OFFSET((int32_t)outBufs, (int32_t)buf_arry),
+                      (size_t)P2H(*buf_arry), (size_t)memplugin_share(*buf_arry));
+
+                 total_count++;
+
+                 bufSize_arry = (void * *)(&(((XDM_BufDesc *)outBufs)->bufSizes));
+
+                 Fill_MmRpc_fxnCtx_Xlt_Array(&(fxnCtx.xltAry[total_count]), OUTBUFS_INDEX,
+                     MmRpc_OFFSET((int32_t)outBufs, (int32_t)bufSize_arry),
+                     (size_t)P2H(*bufSize_arry), (size_t)memplugin_share(*bufSize_arry));
+
+                 total_count++;
+            }
+
+            Fill_MmRpc_fxnCtx_OffPtr_Params(&(fxnCtx.params[OUTBUFS_PTR_INDEX]), GetSz(*buf_arry), P2H(*buf_arry),
+                   sizeof(MemHeader), memplugin_share(*buf_arry));
+
+            data_buf = (void * *)(&(((XDM_BufDesc *)outBufs)->bufs[count]));
+
+            Fill_MmRpc_fxnCtx_Xlt_Array(&(fxnCtx.xltAry[total_count]), OUTBUFS_PTR_INDEX,
+                MmRpc_OFFSET((int32_t)*buf_arry, (int32_t)data_buf), (size_t)*data_buf, (size_t)*data_buf);
+
+            }
+
+}
     /* Invoke the Remote function through MmRpc */
-    eError = MmRpc_call(MmRpcHandle, &fxnCtx, &fxnRet);
+     coreIdx = getCoreIndexFromCodec(codec_id);
+     _ASSERT(coreIdx != INVALID_CORE, DCE_EINVALID_INPUT);
+     eError = MmRpc_call(MmRpcHandle[coreIdx], &fxnCtx, &fxnRet);
 
     _ASSERT(eError == DCE_EOK, DCE_EIPC_CALL_FAIL);
 
@@ -542,6 +676,10 @@ static XDAS_Int32 process(void *codec, void *inBufs, void *outBufs,
         if( codec_id == OMAP_DCE_VIDDEC3 ) {
             /* restore the actual buf ptr before returing to the mmf */
             data_buf = (void * *)(&(((XDM2_BufDesc *)inBufs)->descs[count].buf));
+            *data_buf -= inbuf_offset[count];
+        }else if( codec_id == OMAP_DCE_VIDDEC2 ) {
+            /* restore the actual buf ptr before returing to the mmf */
+            data_buf = (void * *)(&(((XDM1_BufDesc *)inBufs)->descs[count].buf));
             *data_buf -= inbuf_offset[count];
         }
     }
@@ -565,6 +703,7 @@ static void delete(void *codec, dce_codec_type codec_id)
     MmRpc_FxnCtx        fxnCtx;
     int32_t             fxnRet;
     dce_error_status    eError = DCE_EOK;
+    int                 coreIdx = INVALID_CORE;
 
     _ASSERT(codec != NULL, DCE_EINVALID_INPUT);
 
@@ -574,7 +713,9 @@ static void delete(void *codec, dce_codec_type codec_id)
     Fill_MmRpc_fxnCtx_Scalar_Params(&(fxnCtx.params[1]), sizeof(int32_t), (int32_t)codec);
 
     /* Invoke the Remote function through MmRpc */
-    eError = MmRpc_call(MmRpcHandle, &fxnCtx, &fxnRet);
+     coreIdx = getCoreIndexFromCodec(codec_id);
+     _ASSERT(coreIdx != INVALID_CORE, DCE_EINVALID_INPUT);
+     eError = MmRpc_call(MmRpcHandle[coreIdx], &fxnCtx, &fxnRet);
 
     _ASSERT(eError == DCE_EOK, DCE_EIPC_CALL_FAIL);
 
@@ -582,7 +723,7 @@ EXIT:
     return;
 }
 
-/*************** Deocder Codec Engine Functions ***********************/
+/*************** Decoder Codec Engine Functions ***********************/
 VIDDEC3_Handle VIDDEC3_create(Engine_Handle engine, String name,
                               VIDDEC3_Params *params)
 {
@@ -678,4 +819,51 @@ Void VIDENC2_delete(VIDENC2_Handle codec)
     delete(codec, OMAP_DCE_VIDENC2);
     DEBUG("<<");
 }
+/*************** Decoder Codec Engine Functions ***********************/
+VIDDEC2_Handle VIDDEC2_create(Engine_Handle engine, String name,
+                              VIDDEC2_Params *params)
+{
+    VIDDEC2_Handle    codec;
 
+    DEBUG(">> engine=%p, name=%s, params=%p", engine, name, params);
+    codec = create(engine, name, params, OMAP_DCE_VIDDEC2);
+    DEBUG("<< codec=%p", codec);
+    return (codec);
+}
+
+XDAS_Int32 VIDDEC2_control(VIDDEC2_Handle codec, VIDDEC2_Cmd id,
+                           VIDDEC2_DynamicParams *dynParams, VIDDEC2_Status *status)
+{
+    XDAS_Int32    ret;
+
+    DEBUG(">> codec=%p, id=%d, dynParams=%p, status=%p",
+          codec, id, dynParams, status);
+    if( id == XDM_GETVERSION ) {
+        ret = get_version(codec, dynParams, status, OMAP_DCE_VIDDEC2);
+    } else {
+        ret = control(codec, id, dynParams, status, OMAP_DCE_VIDDEC2);
+    }
+    DEBUG("<< ret=%d", ret);
+    return (ret);
+}
+
+XDAS_Int32 VIDDEC2_process(VIDDEC2_Handle codec,
+                           XDM1_BufDesc *inBufs, XDM_BufDesc *outBufs,
+                           VIDDEC2_InArgs *inArgs, VIDDEC2_OutArgs *outArgs)
+{
+    XDAS_Int32    ret;
+
+    DEBUG(">> codec=%p, inBufs=%p, outBufs=%p, inArgs=%p, outArgs=%p",
+          codec, inBufs, outBufs, inArgs, outArgs);
+    ret = process(codec, inBufs, outBufs, inArgs, outArgs, OMAP_DCE_VIDDEC2);
+    DEBUG("<< ret=%d", ret);
+    return (ret);
+}
+
+
+Void VIDDEC2_delete(VIDDEC2_Handle codec)
+{
+    DEBUG(">> codec=%p", codec);
+    delete(codec, OMAP_DCE_VIDDEC2);
+    DEBUG("<<");
+}

@@ -42,13 +42,14 @@
  * possibly we should define a special ioctl and msg to handle this case.
  */
 
-#define DCE_DEVICE_NAME "rpmsg-dce"
 
 #define MAX_NAME_LENGTH 32
 #define MAX_INPUT_BUF 2 // Need to confirm for interlaced YUVs for Encoders
 #define MAX_OUTPUT_BUF 2
-#define MAX_TOTAl_BUF (MAX_INPUT_BUF + MAX_OUTPUT_BUF)
+#define MAX_OUTPUT_BUFPTRS 2//To take care bufs and bufSizes in viddec2 case
+#define MAX_TOTAL_BUF (MAX_INPUT_BUF + MAX_OUTPUT_BUF + MAX_OUTPUT_BUFPTRS)
 
+#define MAX_INSTANCES 4
 /* Message-Ids:
  */
 //#define DCE_RPC_CONNECT         (0x80000000 | 00) Connect not needed anymore.
@@ -65,8 +66,16 @@ typedef enum dce_rpc_call {
 
 typedef enum dce_codec_type {
     OMAP_DCE_VIDENC2 = 1,
-    OMAP_DCE_VIDDEC3 = 2
+    OMAP_DCE_VIDDEC3 = 2,
+    OMAP_DCE_VIDDEC2 = 3
 } dce_codec_type;
+
+typedef enum dce_core_type {
+    INVALID_CORE = -1,
+    IPU = 0,
+    DSP = 1,
+    MAX_REMOTEDEVICES
+}dce_core_type;
 
 /* Structures of RPC */
 typedef struct dce_connect {

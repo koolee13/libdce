@@ -38,6 +38,7 @@
 #include <ti/sdo/ce/Engine.h>
 #include <ti/sdo/ce/video3/viddec3.h>
 #include <ti/sdo/ce/video2/videnc2.h>
+#include <ti/sdo/ce/video2/viddec2.h>
 
 #if defined(BUILDOS_LINUX)
 /* avoid some messy stuff in xdc/std.h which leads to gcc issues */
