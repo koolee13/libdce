@@ -649,7 +649,12 @@ XDAS_Int32 VIDENC2_control(VIDENC2_Handle codec, VIDENC2_Cmd id,
 
     DEBUG(">> codec=%p, id=%d, dynParams=%p, status=%p",
           codec, id, dynParams, status);
-    ret = control(codec, id, dynParams, status, OMAP_DCE_VIDENC2);
+    if( id == XDM_GETVERSION ) {
+        ret = get_version(codec, dynParams, status, OMAP_DCE_VIDENC2);
+    }
+    else {
+        ret = control(codec, id, dynParams, status, OMAP_DCE_VIDENC2);
+    }
     DEBUG("<< ret=%d", ret);
     return (ret);
 }

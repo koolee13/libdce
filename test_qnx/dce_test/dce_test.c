@@ -48,6 +48,12 @@
 #include <memmgr.h>
 #include <ti/sdo/ce/Engine.h>
 #include <ti/sdo/ce/video3/viddec3.h>
+
+// Need to define ti_sdo_fc_ires_NOPROTOCOLREV to supress warning because
+// ijpegvdec.h, impeg2vdec.h, impeg4vdec.h, and ivc1vdec.h will define
+// IRES_HDVICP2_PROTOCOLREVISION which is not used.
+#define ti_sdo_fc_ires_NOPROTOCOLREV
+
 #include <ti/sdo/codecs/h264vdec/ih264vdec.h>
 #include <ti/sdo/codecs/mpeg4vdec/impeg4vdec.h>
 #include <ti/sdo/codecs/vc1vdec/ivc1vdec.h>
@@ -74,6 +80,9 @@
 
 // Profile the init and decode calls
 //#define PROFILE_TIME
+
+// Getting codec version through XDM_GETVERSION
+#define GETVERSION
 
 enum {
     IVAHD_AVC1_DECODE,
@@ -557,8 +566,9 @@ uint64_t mark_microsecond(uint64_t *last)
 FILE   *inputDump;
 #endif
 
+#ifdef GETVERSION
 #define VERSION_SIZE 128
-static char    version_buffer[VERSION_SIZE];
+#endif
 
 /* decoder body */
 int main(int argc, char * *argv)
@@ -956,110 +966,119 @@ int main(int argc, char * *argv)
     dynParams->frameSkipMode = IVIDEO_NO_SKIP;
     dynParams->newFrameFlag  = XDAS_TRUE;
 
+/*
+ * VIDDEC3_control - XDM_GETVERSION & XDM_SETPARAMS
+ */
 
-    //Testing XDM_GETVERSION
-    // NOT WORKING
-#if 0
-
-    switch( codec_switch ) {
-        case DCE_TEST_H264 :
-
-            DEBUG("dce_alloc IH264VDEC_DynamicParams successful dynParams=%p", dynParams);
-            h264_dynParams = (IH264VDEC_DynamicParams *) dynParams;
-            DEBUG("dce_alloc IH264VDEC_DynamicParams successful h264_dynParams=%p", h264_dynParams);
-
-            status = dce_alloc(sizeof(IH264VDEC_Status));
-            status->size = sizeof(IH264VDEC_Status);
-            DEBUG("dce_alloc IH264VDEC_Status successful status=%p", status);
-
-            status->data.buf = (XDAS_Int8 *) version_buffer;
-            h264_status = (IH264VDEC_Status *) status;
-            DEBUG("dce_alloc IH264VDEC_Status successful h264_status=%p", h264_status);
-
-            //((IH264VDEC_Status*)h264_status)->viddec3Status->data.buf = version_buffer;
-            err = VIDDEC3_control(codec, XDM_GETVERSION, (VIDDEC3_DynamicParams *) h264_dynParams, (VIDDEC3_Status *) h264_status);
-
-            DEBUG("dce_alloc IH264VDEC_Status get_version h264_status=%s", (((VIDDEC3_Status *)h264_status)->data.buf));
-            break;
-        default :
-            DEBUG("Not implemented or supported codec_switch %d", codec_switch);
-    }
-
-    if( status ) {
-        dce_free(status);
-    }
+#ifdef GETVERSION
+    // Allocating TILER 1D to store the Codec version information from Codec.
+    char *codec_version = NULL;
+    codec_version = tiler_alloc(VERSION_SIZE, 0);
 #endif
 
     switch( codec_switch ) {
         case DCE_TEST_H264 :
-
-            DEBUG("dce_alloc IH264VDEC_DynamicParams successful dynParams=%p", dynParams);
             h264_dynParams = (IH264VDEC_DynamicParams *) dynParams;
-            DEBUG("dce_alloc IH264VDEC_DynamicParams successful h264_dynParams=%p", h264_dynParams);
+            DEBUG("Allocating IH264VDEC_DynamicParams successful h264_dynParams=%p", h264_dynParams);
 
             status = dce_alloc(sizeof(IH264VDEC_Status));
             status->size = sizeof(IH264VDEC_Status);
             DEBUG("dce_alloc IH264VDEC_Status successful status=%p", status);
 
+#ifdef GETVERSION
+            status->data.buf = (XDAS_Int8 *) codec_version;
+            status->data.bufSize = VERSION_SIZE;
+#endif
+
             h264_status = (IH264VDEC_Status *) status;
-            DEBUG("dce_alloc IH264VDEC_Status successful h264_status=%p", h264_status);
+            DEBUG("IH264VDEC_Status successful h264_status=%p", h264_status);
+
+#ifdef GETVERSION
+            err = VIDDEC3_control(codec, XDM_GETVERSION, (VIDDEC3_DynamicParams *) h264_dynParams, (VIDDEC3_Status *) h264_status);
+            DEBUG("VIDDEC3_control IH264VDEC_Status XDM_GETVERSION h264_status->data.buf = %s", (((VIDDEC3_Status *)h264_status)->data.buf));
+#endif
+
             err = VIDDEC3_control(codec, XDM_SETPARAMS, (VIDDEC3_DynamicParams *) h264_dynParams, (VIDDEC3_Status *) h264_status);
             break;
 
         case DCE_TEST_MPEG4 :
-
-            DEBUG("dce_alloc IMPEG4VDEC_DynamicParams successful dynParams=%p", dynParams);
             mpeg4_dynParams = (IMPEG4VDEC_DynamicParams *) dynParams;
-            DEBUG("dce_alloc IMPEG4VDEC_DynamicParams successful mpeg4_dynParams=%p", mpeg4_dynParams);
+            DEBUG("Allocating IMPEG4VDEC_DynamicParams successful mpeg4_dynParams=%p", mpeg4_dynParams);
 
             status = dce_alloc(sizeof(IMPEG4VDEC_Status));
             status->size = sizeof(IMPEG4VDEC_Status);
             DEBUG("dce_alloc IMPEG4VDEC_Status successful status=%p", status);
 
+#ifdef GETVERSION
+            status->data.buf = (XDAS_Int8 *) codec_version;
+            status->data.bufSize = VERSION_SIZE;
+#endif
+
             mpeg4_status = (IMPEG4VDEC_Status *) status;
             DEBUG("dce_alloc IMPEG4VDEC_Status successful mpeg4_status=%p", mpeg4_status);
+
+#ifdef GETVERSION
+            err = VIDDEC3_control(codec, XDM_GETVERSION, (VIDDEC3_DynamicParams *) mpeg4_dynParams, (VIDDEC3_Status *) mpeg4_status);
+            DEBUG("VIDDEC3_control IMPEG4VDEC_Status XDM_GETVERSION mpeg4_status->data.buf = %s", (((VIDDEC3_Status *)mpeg4_status)->data.buf));
+#endif
+
             err = VIDDEC3_control(codec, XDM_SETPARAMS, (VIDDEC3_DynamicParams *) mpeg4_dynParams, (VIDDEC3_Status *) mpeg4_status);
             break;
 
         case DCE_TEST_VC1SMP :
         case DCE_TEST_VC1AP :
-
-            DEBUG("dce_alloc IVC1VDEC_DynamicParams successful dynParams=%p", dynParams);
             vc1_dynParams = (IVC1VDEC_DynamicParams *) dynParams;
-            DEBUG("dce_alloc IVC1VDEC_DynamicParams successful vc1_dynParams=%p", vc1_dynParams);
+            DEBUG("Allocating IVC1VDEC_DynamicParams successful vc1_dynParams=%p", vc1_dynParams);
 
             status = dce_alloc(sizeof(IVC1VDEC_Status));
             status->size = sizeof(IVC1VDEC_Status);
             DEBUG("dce_alloc IVC1VDEC_Status successful status=%p", status);
 
+#ifdef GETVERSION
+            status->data.buf = (XDAS_Int8 *) codec_version;
+            status->data.bufSize = VERSION_SIZE;
+#endif
+
             vc1_status = (IVC1VDEC_Status *) status;
             DEBUG("dce_alloc IVC1VDEC_Status successful vc1_status=%p", vc1_status);
+
+#ifdef GETVERSION
+            err = VIDDEC3_control(codec, XDM_GETVERSION, (VIDDEC3_DynamicParams *) vc1_dynParams, (VIDDEC3_Status *) vc1_status);
+            DEBUG("VIDDEC3_control IVC1VDEC_Status XDM_GETVERSION vc1_status->data.buf = %s", (((VIDDEC3_Status *)vc1_status)->data.buf));
+#endif
+
             err = VIDDEC3_control(codec, XDM_SETPARAMS, (VIDDEC3_DynamicParams *) vc1_dynParams, (VIDDEC3_Status *) vc1_status);
             break;
 
         case DCE_TEST_MJPEG :
-
-            DEBUG("dce_alloc IJPEGVDEC_DynamicParams successful dynParams=%p", dynParams);
             mjpeg_dynParams = (IJPEGVDEC_DynamicParams *) dynParams;
             mjpeg_dynParams->decodeThumbnail = 0;
             mjpeg_dynParams->thumbnailMode = IJPEGVDEC_THUMBNAIL_DOWNSAMPLE;
             mjpeg_dynParams->downsamplingFactor = IJPEGVDEC_NODOWNSAMPLE;
             mjpeg_dynParams->streamingCompliant = 1;
+            DEBUG("Allocating IJPEGVDEC_DynamicParams successful mjpeg_dynParams=%p", mjpeg_dynParams);
 
-            DEBUG("dce_alloc IJPEGVDEC_DynamicParams successful mjpeg_dynParams=%p", mjpeg_dynParams);
-
-            status = dce_alloc(sizeof(IVC1VDEC_Status));
+            status = dce_alloc(sizeof(IJPEGVDEC_Status));
             status->size = sizeof(IJPEGVDEC_Status);
-            DEBUG("dce_alloc IVC1VDEC_Status successful status=%p", status);
+            DEBUG("dce_alloc IJPEGVDEC_Status successful status=%p", status);
+
+#ifdef GETVERSION
+            status->data.buf = (XDAS_Int8 *) codec_version;
+            status->data.bufSize = VERSION_SIZE;
+#endif
 
             mjpeg_status = (IJPEGVDEC_Status *) status;
             DEBUG("dce_alloc IJPEGVDEC_Status successful mjpeg_status=%p", mjpeg_status);
+
+#ifdef GETVERSION
+            err = VIDDEC3_control(codec, XDM_GETVERSION, (VIDDEC3_DynamicParams *) mjpeg_dynParams, (VIDDEC3_Status *) mjpeg_status);
+            DEBUG("VIDDEC3_control IJPEGVDEC_Status XDM_GETVERSION mjpeg_status->data.buf = %s", (((VIDDEC3_Status *)mjpeg_status)->data.buf));
+#endif
+
             err = VIDDEC3_control(codec, XDM_SETPARAMS, (VIDDEC3_DynamicParams *) mjpeg_dynParams, (VIDDEC3_Status *) mjpeg_status);
             break;
 
         case DCE_TEST_MPEG2 :
-
-            DEBUG("dce_alloc IMPEG2VDEC_DynamicParams successful dynParams=%p", dynParams);
             mpeg2_dynParams = (IMPEG2VDEC_DynamicParams *) dynParams;
             //MPEG2 buffer width should be 128 byte aligned for non TILER (atleast)
             //If displayWidth=0 then MPEG2 codec does not have a way to calculate
@@ -1073,14 +1092,31 @@ int main(int argc, char * *argv)
             status->size = sizeof(IMPEG2VDEC_Status);
             DEBUG("dce_alloc IMPEG2VDEC_Status successful status=%p", status);
 
+#ifdef GETVERSION
+            status->data.buf = (XDAS_Int8 *) codec_version;
+            status->data.bufSize = VERSION_SIZE;
+#endif
+
             mpeg2_status = (IMPEG2VDEC_Status *) status;
-            DEBUG("dce_alloc IMPEG2VDEC_Status successful mpeg2_status=%p", mpeg2_status);
+            DEBUG("mpeg2_status=%p", mpeg2_status);
+
+#ifdef GETVERSION
+            err = VIDDEC3_control(codec, XDM_GETVERSION, (VIDDEC3_DynamicParams *) mpeg2_dynParams, (VIDDEC3_Status *) mpeg2_status);
+            DEBUG("VIDDEC3_control IMPEG2VDEC_Status XDM_GETVERSION mpeg2_status->data.buf = %s", (((VIDDEC3_Status *)mpeg2_status)->data.buf));
+#endif
+
             err = VIDDEC3_control(codec, XDM_SETPARAMS, (VIDDEC3_DynamicParams *) mpeg2_dynParams, (VIDDEC3_Status *) mpeg2_status);
             break;
 
         default :
             DEBUG("Not implemented or supported codec_switch %d", codec_switch);
     }
+
+#ifdef GETVERSION
+    if( codec_version ) {
+        MemMgr_Free(codec_version);
+    }
+#endif
 
     if( err ) {
         ERROR("fail: %d", err);

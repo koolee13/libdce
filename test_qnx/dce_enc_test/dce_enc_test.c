@@ -74,6 +74,9 @@
 // Profile the init and encode calls
 //#define PROFILE_TIME
 
+// Getting codec version through XDM_GETVERSION
+#define GETVERSION
+
 enum {
     IVAHD_H264_ENCODE,
     IVAHD_MPEG4_ENCODE,
@@ -326,6 +329,10 @@ uint64_t mark_microsecond(uint64_t *last)
     return (t1);
 }
 
+#endif
+
+#ifdef GETVERSION
+#define VERSION_SIZE 128
 #endif
 
 /* encoder body */
@@ -940,6 +947,12 @@ int main(int argc, char * *argv)
     dynParams->getBufferHandle = NULL;
     dynParams->lateAcquireArg = -1;
 
+#ifdef GETVERSION
+    // Allocating TILER 1D to store the Codec version information from Codec.
+    char *codec_version = NULL;
+    codec_version = tiler_alloc(VERSION_SIZE, 0);
+#endif
+
     switch( codec_switch ) {
         case DCE_ENC_TEST_H264 :
             dynParams->interFrameInterval = 1; // 2 B frames
@@ -1035,6 +1048,16 @@ int main(int argc, char * *argv)
             status->size = sizeof(IH264ENC_Status);
             DEBUG("dce_alloc IH264ENC_Status successful status=%p", status);
 
+#ifdef GETVERSION
+            status->data.buf = (XDAS_Int8 *) codec_version;
+            status->data.bufSize = VERSION_SIZE;
+
+            h264enc_status = (IH264ENC_Status *) status;
+            DEBUG("IH264ENC_Status successful h264enc_status=%p", h264enc_status);
+            err = VIDENC2_control(codec, XDM_GETVERSION, (VIDENC2_DynamicParams *) h264enc_dynParams, (VIDENC2_Status *) h264enc_status);
+            DEBUG("VIDENC2_control IH264ENC_Status XDM_GETVERSION h264enc_status->data.buf = %s", (((VIDENC2_Status *)h264enc_status)->data.buf));
+#endif
+
             h264enc_status = (IH264ENC_Status *) status;
             err = VIDENC2_control(codec, XDM_SETPARAMS, (VIDENC2_DynamicParams *) h264enc_dynParams, (VIDENC2_Status *) h264enc_status);
             DEBUG("dce_alloc IH264ENC_Status successful h264enc_status=%p", h264enc_status);
@@ -1061,6 +1084,16 @@ int main(int argc, char * *argv)
             status->size = sizeof(IMPEG4ENC_Status);
             DEBUG("dce_alloc IMPEG4ENC_Status successful status=%p", status);
 
+#ifdef GETVERSION
+            status->data.buf = (XDAS_Int8 *) codec_version;
+            status->data.bufSize = VERSION_SIZE;
+
+            mpeg4enc_status = (IMPEG4ENC_Status *) status;
+            DEBUG("IMPEG4ENC_Status successful mpeg4enc_status=%p status->data.buf %p ", mpeg4enc_status, status->data.buf);
+            err = VIDENC2_control(codec, XDM_GETVERSION, (VIDENC2_DynamicParams *) mpeg4enc_dynParams, (VIDENC2_Status *) mpeg4enc_status);
+            DEBUG("VIDENC2_control IMPEG4ENC_Status XDM_GETVERSION mpeg4enc_status->data.buf = %s ", (((VIDENC2_Status *)mpeg4enc_status)->data.buf));
+#endif
+
             mpeg4enc_status = (IMPEG4ENC_Status *) status;
             DEBUG("dce_alloc IMPEG4ENC_Status successful mpeg4enc_status=%p", mpeg4enc_status);
             err = VIDENC2_control(codec, XDM_SETPARAMS, (VIDENC2_DynamicParams *) mpeg4enc_dynParams, (VIDENC2_Status *) mpeg4enc_status);
@@ -1076,6 +1109,12 @@ int main(int argc, char * *argv)
     }
 
     DEBUG("VIDENC2_control XDM_SETPARAMS successful");
+
+#ifdef GETVERSION
+    if( codec_version ) {
+        MemMgr_Free(codec_version);
+    }
+#endif
 
     // XDM_GETBUFINFO
     // Send Control cmd XDM_GETBUFINFO to get min output and output size
