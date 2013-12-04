@@ -183,7 +183,7 @@ static int allocate_nonTiler(shm_buf* shmBuf, int size)
         ERROR("Failed to check memory contiguous ret %d errno %d\n", ret, errno);
         SHM_release(shmBuf);
         return (-ENOMEM);
-    } else if( len != (size)) {
+    } else if( len != (size) ) {
         ERROR("Failed to check len %d != %d\n", len, size);
         SHM_release(shmBuf);
         return (-ENOMEM);
@@ -223,7 +223,7 @@ static const char *get_path(const char *pattern, int cnt)
     /* It would be better to not assume the pattern doesn't expand to
          * less than 10 chars it's original length..
          */
-    if((strlen(pattern) + 10) > len ) {
+    if( (strlen(pattern) + 10) > len ) {
         len  = strlen(pattern) + 10;
         path = realloc(path, len);
     }
@@ -281,7 +281,12 @@ int read_input(const char *pattern, int cnt, char *input)
                 DEBUG("Reading REACH EOF - return -1");
                 return (-1); //Cannot read anymore input
             }
-            input = (char *) ((int)input + 4096);
+
+            if( tiler ) {
+                input = (char *) ((int)input + 4096);
+            } else {
+                input = (char *) ((int)input + width);
+            }
         }
     }
 
@@ -344,6 +349,7 @@ int main(int argc, char * *argv)
     char           *output_mvbuf =  NULL;
     shm_buf         output_mvbuf_nonTiler;
     shm_buf         output_nonTiler;
+    shm_buf         input_nonTiler;
     int             output_size = 0;
     int             mvbufinfo_size = 0;
     char           *in_pattern, *out_pattern;
@@ -377,7 +383,7 @@ int main(int argc, char * *argv)
 
 #endif
 
-    if((argc >= 2) && !strcmp(argv[1], "-1")) {
+    if( (argc >= 2) && !strcmp(argv[1], "-1") ) {
         oned = TRUE;
         argc--;
         argv++;
@@ -418,12 +424,12 @@ int main(int argc, char * *argv)
  * Configuration based on the input parameters
  */
 
-    if((!(strcmp(vid_codec, "h264")))) {
+    if( (!(strcmp(vid_codec, "h264"))) ) {
         ivahd_encode_type = IVAHD_H264_ENCODE;
         codec_switch = DCE_ENC_TEST_H264;
-        if((!(strcmp(profile, "baseline")))) {
+        if( (!(strcmp(profile, "baseline"))) ) {
             profile_value = IH264_BASELINE_PROFILE;
-        } else if((!(strcmp(profile, "high")))) {
+        } else if( (!(strcmp(profile, "high"))) ) {
             profile_value = IH264_HIGH_PROFILE;
         } else {
             printf("Wrong profile value. Please use: baseline or high. See 'use dce_enc_test'.\n");
@@ -458,7 +464,7 @@ int main(int argc, char * *argv)
         ivahd_encode_type = IVAHD_MPEG4_ENCODE;
         codec_switch = DCE_ENC_TEST_MPEG4;
 
-        if((!(strcmp(profile, "simple")))) {
+        if( (!(strcmp(profile, "simple"))) ) {
             profile_value = 3;
         } else {
             printf("Wrong profile value. Please use: simple. See 'use dce_enc_test'.\n");
@@ -485,7 +491,7 @@ int main(int argc, char * *argv)
         ivahd_encode_type = IVAHD_H263_ENCODE;
         codec_switch = DCE_ENC_TEST_H263;
 
-        if((!(strcmp(profile, "simple")))) {
+        if( (!(strcmp(profile, "simple"))) ) {
             profile_value = 3;
         } else {
             printf("Wrong profile value. Please use: simple. See 'use dce_enc_test'.\n");
@@ -559,7 +565,6 @@ int main(int argc, char * *argv)
     inBufs->imageRegion.topLeft.x = 0;
     inBufs->imageRegion.topLeft.y = 0;
     inBufs->imageRegion.bottomRight.x = width;
-    inBufs->imagePitch[0] = 4096;
 
     inBufs->topFieldFirstFlag = 0; //Only valid for interlace content.
     inBufs->contentType = IVIDEO_PROGRESSIVE;
@@ -575,31 +580,66 @@ int main(int argc, char * *argv)
     inBufs->secondFieldOffsetWidth[0] = 0;
     inBufs->secondFieldOffsetHeight[0] = 0;
 
-    inBufs->planeDesc[0].memType = XDM_MEMTYPE_TILED8;
-    inBufs->planeDesc[0].bufSize.tileMem.width  = width;
-    inBufs->planeDesc[0].bufSize.tileMem.height = height;
+    if( !(strcmp(tilerbuffer, "tiler")) ) {
+        DEBUG("Input allocate through TILER 2D");
+        tiler = 1;
 
-    inBufs->imagePitch[1] = 4096;
-    inBufs->secondFieldOffsetWidth[1] = 1;
-    inBufs->secondFieldOffsetHeight[1] = 0;
+        inBufs->imagePitch[0] = 4096;
+        inBufs->planeDesc[0].memType = XDM_MEMTYPE_TILED8;
+        inBufs->planeDesc[0].bufSize.tileMem.width  = width;
+        inBufs->planeDesc[0].bufSize.tileMem.height = height;
 
-    inBufs->planeDesc[1].memType = XDM_MEMTYPE_TILED16;
-    inBufs->planeDesc[1].bufSize.tileMem.width  = width; /* UV interleaved width is same a Y */
-    inBufs->planeDesc[1].bufSize.tileMem.height = height / 2;
+        inBufs->secondFieldOffsetWidth[1] = 1;
+        inBufs->secondFieldOffsetHeight[1] = 0;
 
-    // INPUT BUFFER MUST BE TILED NV12. Encoder codec doesn't support non TILED input buffer.
-    buf = calloc(sizeof(InputBuffer), 1);
-    DEBUG(" ----------------- create INPUT TILER buf 0x%x --------------------", (unsigned int)buf);
-    buf->buf = tiler_alloc(width, height);
-    if( buf->buf ) {
-        buf->y   = (SSPtr)buf->buf;
-        buf->uv  = (SSPtr)buf->buf + (height * 4096);
+        inBufs->imagePitch[1] = 4096;
+        inBufs->planeDesc[1].memType = XDM_MEMTYPE_TILED16;
+        inBufs->planeDesc[1].bufSize.tileMem.width  = width; /* UV interleaved width is same a Y */
+        inBufs->planeDesc[1].bufSize.tileMem.height = height / 2;
 
-        DEBUG("INPUT TILER buf=%p, buf->buf=%p y=%08x, uv=%08x", buf, buf->buf, buf->y, buf->uv);
+        // INPUT BUFFER MUST BE TILED NV12. Encoder codec doesn't support non TILED input buffer.
+        buf = calloc(sizeof(InputBuffer), 1);
+        DEBUG(" ----------------- create INPUT TILER buf 0x%x --------------------", (unsigned int)buf);
+        buf->buf = tiler_alloc(width, height);
+        if( buf->buf ) {
+            buf->y   = (SSPtr)buf->buf;
+            buf->uv  = (SSPtr)buf->buf + (height * 4096);
+
+            DEBUG("INPUT TILER buf=%p, buf->buf=%p y=%08x, uv=%08x", buf, buf->buf, buf->y, buf->uv);
+        } else {
+            ERROR(" ---------------- tiler_alloc failed --------------------");
+            free(buf);
+            goto shutdown;
+        }
     } else {
-        ERROR(" ---------------- tiler_alloc failed --------------------");
-        free(buf);
-        goto shutdown;
+        DEBUG("Input allocate through NON-TILER");
+        tiler = 0;
+
+        inBufs->imagePitch[0] = width;
+        inBufs->planeDesc[0].memType = XDM_MEMTYPE_RAW;
+        inBufs->planeDesc[0].bufSize.bytes = width * height;
+        inBufs->secondFieldOffsetWidth[1] = 1;
+        inBufs->secondFieldOffsetHeight[1] = 0;
+
+        inBufs->imagePitch[1] = width;
+        inBufs->planeDesc[1].memType = XDM_MEMTYPE_RAW;
+        inBufs->planeDesc[1].bufSize.bytes = width * height / 2;
+        buf = calloc(sizeof(InputBuffer), 1);
+        DEBUG(" ----------------- create NON INPUT TILER buf 0x%x --------------------", (unsigned int)buf);
+        err = allocate_nonTiler(&input_nonTiler, width * height * 3/2);
+        if( err < 0 ) {
+            ERROR(" ---------------- allocate_nonTiler failed --------------------");
+            free(buf);
+            goto shutdown;
+        }
+        else
+        {
+            buf->buf = (char*)input_nonTiler.vir_addr;
+            buf->y   = (SSPtr)input_nonTiler.vir_addr;
+            buf->uv  = (SSPtr)input_nonTiler.vir_addr + (height * width);
+
+            DEBUG("INPUT NON TILER buf=%p, buf->buf=%p y=%08x, uv=%08x", buf, buf->buf, buf->y, buf->uv);
+        }
     }
 
 #ifdef PROFILE_TIME
@@ -1128,20 +1168,18 @@ int main(int argc, char * *argv)
     output_size = status->bufInfo.minOutBufSize[0].bytes;
     mvbufinfo_size = status->bufInfo.minOutBufSize[1].bytes;
 
-    if (codec_switch == DCE_ENC_TEST_H264) {
+    if( codec_switch == DCE_ENC_TEST_H264 ) {
         outBufs->numBufs = status->bufInfo.minNumOutBufs;          // this value is 1
-    } else if( codec_switch == DCE_ENC_TEST_MPEG4 || codec_switch == DCE_ENC_TEST_H263 ) {
+    } else if( (codec_switch == DCE_ENC_TEST_MPEG4) || (codec_switch == DCE_ENC_TEST_H263) ) {
         outBufs->numBufs = 1;
     }
 
-    if( !(strcmp(tilerbuffer, "tiler"))) {
+    if( tiler ) {
         DEBUG("Output allocate through TILER 1D");
-        tiler = 1;
         output = tiler_alloc(output_size, 0);
 
     } else {
         DEBUG("Output allocate through NON-TILER");
-        tiler = 0;
         err = allocate_nonTiler(&output_nonTiler, output_size);
         if( err < 0 ) {
             ERROR("fail: %d", err);
@@ -1156,8 +1194,8 @@ int main(int argc, char * *argv)
 
     DEBUG("Is TILER %d outBufs->descs[0].buf %p output %p output_nonTiler %p mvbufinfo_size %d", tiler, outBufs->descs[0].buf, output, &output_nonTiler, mvbufinfo_size);
 
-    if (mvbufinfo_size > 0) {
-        if (tiler) {
+    if( mvbufinfo_size > 0 ) {
+        if( tiler ) {
             output_mvbuf = tiler_alloc(mvbufinfo_size, 0);
             DEBUG("MVBufInfo: TILER outBufs->descs[1].buf %p output_mvbuf %p", outBufs->descs[1].buf, output_mvbuf);
         }
@@ -1196,7 +1234,7 @@ int main(int argc, char * *argv)
         //Read the NV12 frame to input buffer to be encoded.
         n = read_input(in_pattern, in_cnt, buf->buf);
 
-        if( n && (n != -1)) {
+        if( n && (n != -1) ) {
             eof = 0;
             inBufs->planeDesc[0].buf = (XDAS_Int8 *)buf->y;
             inBufs->planeDesc[1].buf = (XDAS_Int8 *)buf->uv;
@@ -1211,7 +1249,7 @@ int main(int argc, char * *argv)
             if( codec_switch == DCE_ENC_TEST_H264 ) {
                 h264enc_inArgs = (IH264ENC_InArgs *) inArgs;
                 DEBUG("TEST inArgs->inputID %d h264enc_inArgs->videnc2InArgs.inputID %d", inArgs->inputID, h264enc_inArgs->videnc2InArgs.inputID);
-            } else if( codec_switch == DCE_ENC_TEST_MPEG4 || codec_switch == DCE_ENC_TEST_H263 ) {
+            } else if( (codec_switch == DCE_ENC_TEST_MPEG4) || (codec_switch == DCE_ENC_TEST_H263) ) {
                 mpeg4enc_inArgs = (IMPEG4ENC_InArgs *) inArgs;
                 DEBUG("TEST inArgs->inputID %d mpeg4enc_inArgs->videnc2InArgs.inputID %d", inArgs->inputID, mpeg4enc_inArgs->videnc2InArgs.inputID);
             }
@@ -1247,7 +1285,7 @@ int main(int argc, char * *argv)
             inArgs->inputID = 0;
             if( codec_switch == DCE_ENC_TEST_H264 ) {
                 h264enc_inArgs = (IH264ENC_InArgs *) inArgs;
-            } else if( codec_switch == DCE_ENC_TEST_MPEG4 || codec_switch == DCE_ENC_TEST_H263 ) {
+            } else if( (codec_switch == DCE_ENC_TEST_MPEG4) || (codec_switch == DCE_ENC_TEST_H263) ) {
                 mpeg4enc_inArgs = (IMPEG4ENC_InArgs *) inArgs;
             }
             inBufs->planeDesc[0].buf = NULL;
@@ -1286,7 +1324,7 @@ int main(int argc, char * *argv)
             inArgs->inputID = 0;
             if( codec_switch == DCE_ENC_TEST_H264 ) {
                 h264enc_inArgs = (IH264ENC_InArgs *) inArgs;
-            } else if( codec_switch == DCE_ENC_TEST_MPEG4 || codec_switch == DCE_ENC_TEST_H263 ) {
+            } else if( (codec_switch == DCE_ENC_TEST_MPEG4) || (codec_switch == DCE_ENC_TEST_H263) ) {
                 mpeg4enc_inArgs = (IMPEG4ENC_InArgs *) inArgs;
             }
             inBufs->planeDesc[0].buf = NULL;
@@ -1365,7 +1403,7 @@ int main(int argc, char * *argv)
                         DEBUG("DETAIL EXTENDED ERROR h264enc_status->extErrorCode[%d]=%08x", i, (uint)h264enc_status->extErrorCode[i]);
                     }
 
-                    if( XDM_ISFATALERROR(h264enc_outArgs->videnc2OutArgs.extendedError)) {
+                    if( XDM_ISFATALERROR(h264enc_outArgs->videnc2OutArgs.extendedError) ) {
                         ERROR("process returned error: %d\n", err);
                         //ERROR("extendedError: %08x", outArgs->extendedError);
                         ERROR("extendedError: %08x", h264enc_outArgs->videnc2OutArgs.extendedError);
@@ -1489,7 +1527,7 @@ out:
     }
 
     printf("\nFreeing output %p... output_mvbuf %p...\n", output, output_mvbuf);
-    if (tiler) {
+    if( tiler ) {
         if( output ) {
             MemMgr_Free(output);
         }
@@ -1513,7 +1551,13 @@ out:
     printf("\nFreeing buf %p...\n", buf);
     if( buf ) {
         if( buf->buf ) {
-            MemMgr_Free(buf->buf);
+            if( tiler ) {
+                printf("\nFreeing buf->buf %p...\n", buf->buf);
+                MemMgr_Free(buf->buf);
+            } else {
+                printf("\nFreeing input_nonTiler %p...\n", &input_nonTiler);
+                free_nonTiler(&input_nonTiler);
+            }
         }
         free(buf);
     }
