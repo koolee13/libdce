@@ -95,7 +95,7 @@ void dce_deinit(void *dev);
 
 /************************ Input/Output Buffer Lock/Unlock APIs ************************/
 /*=====================================================================================*/
-/** dce_buf_lock            : Pin or lock Tiler Buffers which would be used by the codec
+/** dce_buf_lock            : Pin or lock Tiler Buffers which would be used by the IVAHD codec
  *                            as reference buffers. API is specific to GLP.
  *
  * @ param num    [in]      : Number of buffers to be locked.
@@ -106,13 +106,34 @@ int dce_buf_lock(int num, size_t *handle);
 
 /*=====================================================================================*/
 /** dce_buf_unlock          : Unpin or unlock Tiler Buffers which were locked to be used
- *                            by the codec as reference buffers. API is specific to GLP.
+ *                            by the IVAHD codec as reference buffers. API is specific to GLP.
  *
  * @ param num    [in]      : Number of buffers to be locked.
  * @ param handle [in]      : Pointer to array of DMA Buf FDs of the buffers to be locked.
  * @ return                 : DCE error status is returned.
  */
 int dce_buf_unlock(int num, size_t *handle);
+/************************ Input/Output Buffer Lock/Unlock APIs ************************/
+/*=====================================================================================*/
+/** dsp_dce_buf_lock            : Pin or lock Tiler Buffers which would be used by the DSP codec
+ *                            as reference buffers. API is specific to GLP.
+ *
+ * @ param num    [in]      : Number of buffers to be locked.
+ * @ param handle [in]      : Pointer to array of DMA Buf FDs of the buffers to be locked.
+ * @ return                 : DCE error status is returned.
+ */
+int dsp_dce_buf_lock(int num, size_t *handle);
+
+/*=====================================================================================*/
+/** dsp_dce_buf_unlock          : Unpin or unlock Tiler Buffers which were locked to be used
+ *                            by the DSP codec as reference buffers. API is specific to GLP.
+ *
+ * @ param num    [in]      : Number of buffers to be locked.
+ * @ param handle [in]      : Pointer to array of DMA Buf FDs of the buffers to be locked.
+ * @ return                 : DCE error status is returned.
+ */
+int dsp_dce_buf_unlock(int num, size_t *handle);
+
 
 /******************************* OMAPDRM Get/Set FD APIs *******************************/
 /*=====================================================================================*/

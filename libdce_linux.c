@@ -41,6 +41,7 @@
 #include <MmRpc.h>
 #include "dce_priv.h"
 #include "libdce.h"
+#include "dce_rpc.h"
 #include "memplugin.h"
 
 #define INVALID_DRM_FD (-1)
@@ -48,7 +49,7 @@
 int                    OmapDrm_FD  = INVALID_DRM_FD;
 int                    bDrmOpenedByDce = FALSE;
 struct omap_device    *OmapDev     = NULL;
-extern MmRpc_Handle    MmRpcHandle;
+extern MmRpc_Handle    MmRpcHandle[];
 
 void *dce_init(void)
 {
@@ -98,7 +99,7 @@ int dce_buf_lock(int num, size_t *handle)
         desc[i].handle = handle[i];
     }
 
-    eError = MmRpc_use(MmRpcHandle, MmRpc_BufType_Handle, num, desc);
+    eError = MmRpc_use(MmRpcHandle[IPU], MmRpc_BufType_Handle, num, desc);
 
     _ASSERT(eError == DCE_EOK, DCE_EIPC_CALL_FAIL);
 EXIT:
@@ -123,7 +124,35 @@ int dce_buf_unlock(int num, size_t *handle)
         desc[i].handle = handle[i];
     }
 
-    eError = MmRpc_release(MmRpcHandle, MmRpc_BufType_Handle, num, desc);
+    eError = MmRpc_release(MmRpcHandle[IPU], MmRpc_BufType_Handle, num, desc);
+
+    _ASSERT(eError == DCE_EOK, DCE_EIPC_CALL_FAIL);
+EXIT:
+    if( desc ) {
+        free(desc);
+    }
+    return (eError);
+}
+/*These two are duplicate of above two functions
+  These have been added temporarily since there is no
+  other way to get the core index.These have been
+ added to avoid modifying the current apis */
+int dsp_dce_buf_lock(int num, size_t *handle)
+{
+    int                 i;
+    MmRpc_BufDesc      *desc = NULL;
+    dce_error_status    eError = DCE_EOK;
+
+    _ASSERT(num > 0, DCE_EINVALID_INPUT);
+
+    desc = malloc(num * sizeof(MmRpc_BufDesc));
+    _ASSERT(desc != NULL, DCE_EOUT_OF_MEMORY);
+
+    for( i = 0; i < num; i++ ) {
+        desc[i].handle = handle[i];
+    }
+
+    eError = MmRpc_use(MmRpcHandle[DSP], MmRpc_BufType_Handle, num, desc);
 
     _ASSERT(eError == DCE_EOK, DCE_EIPC_CALL_FAIL);
 EXIT:
@@ -133,6 +162,30 @@ EXIT:
     return (eError);
 }
 
+int dsp_dce_buf_unlock(int num, size_t *handle)
+{
+    int                 i;
+    MmRpc_BufDesc      *desc = NULL;
+    dce_error_status    eError = DCE_EOK;
+
+    _ASSERT(num > 0, DCE_EINVALID_INPUT);
+
+    desc = malloc(num * sizeof(MmRpc_BufDesc));
+    _ASSERT(desc != NULL, DCE_EOUT_OF_MEMORY);
+
+    for( i = 0; i < num; i++ ) {
+        desc[i].handle = handle[i];
+    }
+
+    eError = MmRpc_release(MmRpcHandle[DSP], MmRpc_BufType_Handle, num, desc);
+
+    _ASSERT(eError == DCE_EOK, DCE_EIPC_CALL_FAIL);
+EXIT:
+    if( desc ) {
+        free(desc);
+    }
+    return (eError);
+}
 /* Incase of X11 or Wayland the fd can be shared to libdce using this call */
 void dce_set_fd(int dce_fd)
 {
