@@ -190,8 +190,8 @@ XDAS_Int32 VIDDEC3_control(VIDDEC3_Handle codec, VIDDEC3_Cmd id,
  *                         inBufs->descs[0].buf should have a virtual pointer
  *                         to the Input Buffer in QNX. In Linux, it
  *                         should have a DMA Buf FD to the Input Buffer.
- *                         In Android, it should have the ptr returned from
- *                         memplugin, and the memheader->offset should have
+ *                         In Android, it should have the memheader pointer
+ *                         and the memheader->offset should have
  *                         the offset for the actual data within the input buffer;
  *                         memheader->offset = pInBufHeader->nOffset;
  * @ param outBufs [in]  : Pointer to Output Buffer Descriptor structure
@@ -199,8 +199,11 @@ XDAS_Int32 VIDDEC3_control(VIDDEC3_Handle codec, VIDDEC3_Cmd id,
  *                         outBufs->descs[0].buf and outBufs->descs[1].buf
  *                         should have virtual pointers to the Output
  *                         Luma and Chroma Buffers respectively in QNX.
- *                         In Linux/Android, these fields should have
- *                         DMA Buf FDs to the Output Buffers.
+ *                         In Linux these fields should have
+ *                         DMA Buf FDs to the Output Buffers. In Android
+ *                         these fields should have the memheader pointer,
+ *                         and the memheader->offset should have the offset
+ *                         for the actual data with in the outbuffer.
  * @ param inArgs  [in]  : Pointer to Input Arguments structure
  *                         of codec allocated using dce_alloc() API.
  * @ param outArgs [out] : Pointer to Output Arguments structure

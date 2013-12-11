@@ -515,6 +515,7 @@ static XDAS_Int32 process(void *codec, void *inBufs, void *outBufs,
 
 #ifdef BUILDOS_ANDROID
     int32_t    inbuf_offset[MAX_INPUT_BUF];
+    int32_t    outbuf_offset[MAX_OUTPUT_BUF];
 #endif
 
     _ASSERT(codec != NULL, DCE_EINVALID_INPUT);
@@ -564,58 +565,44 @@ static XDAS_Int32 process(void *codec, void *inBufs, void *outBufs,
     for( count = 0, total_count = 0; count < numInBufs; count++, total_count++ ) {
          if( codec_id == OMAP_DCE_VIDDEC3 ) {
               data_buf = (void * *)(&(((XDM2_BufDesc *)inBufs)->descs[count].buf));
-#ifdef BUILDOS_ANDROID
-              /* the decoder input buffer filled by the parsers, have an offset       */
-              /* for the actual data. the offset within the input buffer is provided   */
-              /* via memheader offset field. Hence the buf ptr needs to be advanced with the offset   */
-              inbuf_offset[count] = P2H(*data_buf)->offset;
-              Fill_MmRpc_fxnCtx_Xlt_Array(&(fxnCtx.xltAry[total_count]), INBUFS_INDEX,
-                   MmRpc_OFFSET((int32_t)inBufs, (int32_t)data_buf),(size_t)P2H(*data_buf),
-                   (size_t)memplugin_share((void *)*data_buf));
-
-              *data_buf += inbuf_offset[count];
-#else
-              Fill_MmRpc_fxnCtx_Xlt_Array(&(fxnCtx.xltAry[total_count]), INBUFS_INDEX,
-                   MmRpc_OFFSET((int32_t)inBufs, (int32_t)data_buf),
-                   (size_t)*data_buf, (size_t)*data_buf);
-#endif
          } else if( codec_id == OMAP_DCE_VIDENC2 ) {
               data_buf = (void * *)(&(((IVIDEO2_BufDesc *)inBufs)->planeDesc[count].buf));
-              Fill_MmRpc_fxnCtx_Xlt_Array(&(fxnCtx.xltAry[total_count]), INBUFS_INDEX,
-                   MmRpc_OFFSET((int32_t)inBufs, (int32_t)data_buf),
-                   (size_t)*data_buf, (size_t)*data_buf);
-
          } else if( codec_id == OMAP_DCE_VIDDEC2 ) {
               data_buf = (void * *)(&(((XDM1_BufDesc *)inBufs)->descs[count].buf));
-#ifdef BUILDOS_ANDROID
-              /* the decoder input buffer filled by the parsers, have an offset       */
-              /* for the actual data. the offset within the input buffer is provided   */
-              /* via memheader offset field. Hence the buf ptr needs to be advanced with the offset   */
-              inbuf_offset[count] = P2H(*data_buf)->offset;
-              Fill_MmRpc_fxnCtx_Xlt_Array(&(fxnCtx.xltAry[total_count]), INBUFS_INDEX,
-                   MmRpc_OFFSET((int32_t)inBufs, (int32_t)data_buf),(size_t)P2H(*data_buf),
-                   (size_t)memplugin_share((void *)*data_buf));
-
-              *data_buf += inbuf_offset[count];
-#else
-              Fill_MmRpc_fxnCtx_Xlt_Array(&(fxnCtx.xltAry[total_count]), INBUFS_INDEX,
-                   MmRpc_OFFSET((int32_t)inBufs, (int32_t)data_buf),
-                   (size_t)*data_buf, (size_t)*data_buf);
-#endif
          }
-}
+#ifdef BUILDOS_ANDROID
+        inbuf_offset[count] = ((MemHeader*)(*data_buf))->offset;
+        Fill_MmRpc_fxnCtx_Xlt_Array(&(fxnCtx.xltAry[total_count]), INBUFS_INDEX, MmRpc_OFFSET((int32_t)inBufs,
+                                    (int32_t)data_buf), (size_t)(*data_buf),
+                                    (size_t)(((MemHeader*)(*data_buf))->dma_buf_fd));
+        *data_buf += inbuf_offset[count];
+#else
+        Fill_MmRpc_fxnCtx_Xlt_Array(&(fxnCtx.xltAry[total_count]), INBUFS_INDEX,
+                                    MmRpc_OFFSET((int32_t)inBufs, (int32_t)data_buf),
+                                    (size_t)*data_buf, (size_t)*data_buf);
+#endif
+    }
 
     /* Output Buffers */
     for( count = 0; count < numOutBufs; count++, total_count++ ) {
-         if(codec_id == OMAP_DCE_VIDENC2 || codec_id == OMAP_DCE_VIDDEC3) {
-              if(((XDM2_BufDesc *)outBufs)->descs[LUMA_BUF].buf != ((XDM2_BufDesc *)outBufs)->descs[CHROMA_BUF].buf ) {
-                   /* Either Encode usecase or MultiPlanar Buffers for Decode usecase */
-                   data_buf = (void * *)(&(((XDM2_BufDesc *)outBufs)->descs[count].buf));
-                   Fill_MmRpc_fxnCtx_Xlt_Array(&(fxnCtx.xltAry[total_count]), OUTBUFS_INDEX,
-                        MmRpc_OFFSET((int32_t)outBufs, (int32_t)data_buf),
-                        (size_t)*data_buf, (size_t)*data_buf);
+        if(codec_id == OMAP_DCE_VIDENC2 || codec_id == OMAP_DCE_VIDDEC3) {
+            if(((XDM2_BufDesc *)outBufs)->descs[LUMA_BUF].buf != ((XDM2_BufDesc *)outBufs)->descs[CHROMA_BUF].buf ) {
+                /* Either Encode usecase or MultiPlanar Buffers for Decode usecase */
+                data_buf = (void * *)(&(((XDM2_BufDesc *)outBufs)->descs[count].buf));
+#ifdef BUILDOS_ANDROID
+                outbuf_offset[count] = ((MemHeader*)(*data_buf))->offset;
+                Fill_MmRpc_fxnCtx_Xlt_Array(&(fxnCtx.xltAry[total_count]), OUTBUFS_INDEX, MmRpc_OFFSET((int32_t)outBufs,
+                                            (int32_t)data_buf), (size_t)(*data_buf),
+                                            (size_t)(((MemHeader*)(*data_buf))->dma_buf_fd));
+                *data_buf += outbuf_offset[count];
+
+#else
+                Fill_MmRpc_fxnCtx_Xlt_Array(&(fxnCtx.xltAry[total_count]), OUTBUFS_INDEX,
+                                            MmRpc_OFFSET((int32_t)outBufs, (int32_t)data_buf),
+                                            (size_t)*data_buf, (size_t)*data_buf);
+#endif
               }
-#if defined(BUILDOS_LINUX) || defined(BUILDOS_ANDROID)
+#if defined(BUILDOS_LINUX)
               else {
                    /* SinglePlanar Buffers for Decode usecase*/
                    data_buf = (void * *)(&(((XDM2_BufDesc *)outBufs)->descs[count].buf));
@@ -672,15 +659,18 @@ static XDAS_Int32 process(void *codec, void *inBufs, void *outBufs,
 
 #ifdef BUILDOS_ANDROID
     for( count = 0; count < numInBufs; count++ ) {
-         if( codec_id == OMAP_DCE_VIDDEC3 ) {
-              /* restore the actual buf ptr before returing to the mmf */
-              data_buf = (void * *)(&(((XDM2_BufDesc *)inBufs)->descs[count].buf));
-              *data_buf -= inbuf_offset[count];
-         } else if( codec_id == OMAP_DCE_VIDDEC2 ) {
-              /* restore the actual buf ptr before returing to the mmf */
-              data_buf = (void * *)(&(((XDM1_BufDesc *)inBufs)->descs[count].buf));
-              *data_buf -= inbuf_offset[count];
-         }
+        if( codec_id == OMAP_DCE_VIDDEC3 ) {
+            /* restore the actual buf ptr before returing to the mmf */
+            data_buf = (void * *)(&(((XDM2_BufDesc *)inBufs)->descs[count].buf));
+        } else if( codec_id == OMAP_DCE_VIDDEC2 ) {
+            /* restore the actual buf ptr before returing to the mmf */
+            data_buf = (void * *)(&(((XDM1_BufDesc *)inBufs)->descs[count].buf));
+        }
+        *data_buf -= inbuf_offset[count];
+    }
+    for (count = 0; count < numOutBufs; count++){
+        data_buf = (void * *)(&(((XDM2_BufDesc *)outBufs)->descs[count].buf));
+        *data_buf -= outbuf_offset[count];
     }
 #endif
 
