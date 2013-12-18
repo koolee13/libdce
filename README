@@ -81,31 +81,31 @@ export IPC_HEADERS=<path to IPC Headers> (MmRpc.h)
 
 Building:
 
-	user@target:~/libdce# ./autogen.sh --prefix=/usr
-	This will check for required packages, compiler,
-	headers and generates the Makefile. --prefix=/usr
-	will confirure the install directory to /usr
+    user@target:~/libdce# ./autogen.sh --prefix=/usr
+    This will check for required packages, compiler,
+    headers and generates the Makefile. --prefix=/usr
+    will confirure the install directory to /usr
 
-	user@target:~/libdce# make
-	Running make will build the library. It generates
-	the shared objects, static library, libdce.la
-	file for linking (Used by libtool) and
-	libdce.pc used for querying using pkg-config.
+    user@target:~/libdce# make
+    Running make will build the library. It generates
+    the shared objects, static library, libdce.la
+    file for linking (Used by libtool) and
+    libdce.pc used for querying using pkg-config.
 
-	user@target:~/libdce# make install
-	Installs the library files(libdce.so*, libdce.a,
-	libdce.la) to $(--prefix)/lib.
-	Installs libdce.pc to $(--prefix)/lib/pkgconfig
-	Installs libdce.h and required headers to
-	$(--prefix)/include/dce/
+    user@target:~/libdce# make install
+    Installs the library files(libdce.so*, libdce.a,
+    libdce.la) to $(--prefix)/lib.
+    Installs libdce.pc to $(--prefix)/lib/pkgconfig
+    Installs libdce.h and required headers to
+    $(--prefix)/include/dce/
 
 Clean:
 
-	user@target:~/libdce# make clean
-	This will clean the build. Run make to build.
-	user@target:~/libdce# make distclean
-	This will clean the build and remove Makefiles.
-	Follow build steps above to build again.
+    user@target:~/libdce# make clean
+    This will clean the build. Run make to build.
+    user@target:~/libdce# make distclean
+    This will clean the build and remove Makefiles.
+    Follow build steps above to build again.
 
 ######################### For Android #########################
 
@@ -493,18 +493,17 @@ If (BUILDOS_LINUX) {
 ************ Version Info of Headers included in packages folder ***********
 
 Tools:
-XDC version  : xdctools_3_25_02_70
+XDC version  : xdctools_3_25_04_88
 CE version   : codec_engine_3_24_00_08
 XDAIS version: xdais_7_24_00_04
+FC version: framework_components_3_24_02_15
 
 IVAHD_Codecs:
-H.264 Dec  : 02.00.13.00
-MJPEG Dec  : 01.00.11.01
-MPEG-4 Dec : 01.00.13.00
+H.264 Enc  : 02.00.07.01
+H.264 Dec  : 02.00.15.01
+MJPEG Dec  : 01.00.12.01
+MPEG-2 Dec : 01.00.13.01
+MPEG-4 Enc : 01.00.02.01
+MPEG-4 Dec : 01.00.14.01
 VC-1 Dec   : 01.00.00.11
-MPEG-2 Dec : 01.00.12.00
-SVC Dec    : 00.06.00.00 
-H.264 Enc  : 02.00.06.01
-MJPEG Enc  : 01.00.02.01
-SVC Enc    : 00.02.00.05
 
