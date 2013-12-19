@@ -50,7 +50,7 @@
 /* Handle used for Remote Communication              */
 MmRpc_Handle    MmRpcHandle[MAX_REMOTEDEVICES] = { NULL};
 Engine_Handle   gEngineHandle[MAX_INSTANCES][MAX_REMOTEDEVICES] = { {NULL, NULL}};
-static pthread_mutex_t    mutex = PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t    ipc_mutex = PTHREAD_MUTEX_INITIALIZER;
 static int      __ClientCount[MAX_REMOTEDEVICES] = {0};
 int             dce_debug = DCE_DEBUG_LEVEL;
 const String DCE_DEVICE_NAME[MAX_REMOTEDEVICES]= {"rpmsg-dce","rpmsg-dce-dsp"};
@@ -164,7 +164,7 @@ static int dce_ipc_init(int core)
 
     DEBUG(" >> dce_ipc_init\n");
 
-	/*First check if maximum clients are already using ipc*/
+    /*First check if maximum clients are already using ipc*/
     if(__ClientCount[core] >= MAX_INSTANCES) {
         eError = DCE_EXDM_UNSUPPORTED;
         return (eError);
@@ -193,6 +193,10 @@ EXIT:
  */
 static void dce_ipc_deinit(int core)
 {
+    if(__ClientCount[core] == 0) {
+        DEBUG("Nothing to be done: a spurious call\n");
+        return;
+    }
     __ClientCount[core]--;
     if( __ClientCount[core] > 0 ) {
          goto EXIT;
@@ -225,9 +229,12 @@ Engine_Handle Engine_open(String name, Engine_Attrs *attrs, Engine_Error *ec)
     Engine_Handle       engine_handle = NULL;
     int                 coreIdx   = INVALID_CORE;
 
+
+    /*Acquire permission to use IPC*/
+    pthread_mutex_lock(&ipc_mutex);
+
     _ASSERT(name != '\0', DCE_EINVALID_INPUT);
 
-    pthread_mutex_lock(&mutex);
     coreIdx = getCoreIndexFromName(name);
     _ASSERT(coreIdx != INVALID_CORE, DCE_EINVALID_INPUT);
     /* Initialize IPC. In case of Error Deinitialize them */
@@ -271,7 +278,8 @@ EXIT:
     if( engine_attrs ) {
          memplugin_free(engine_attrs);
     }
-    pthread_mutex_unlock(&mutex);
+    /*Relinquish IPC*/
+    pthread_mutex_unlock(&ipc_mutex);
 
     return ((Engine_Handle)engine_handle);
 }
@@ -288,7 +296,9 @@ Void Engine_close(Engine_Handle engine)
     dce_error_status    eError = DCE_EOK;
     int32_t             coreIdx = INVALID_CORE;
 
-    pthread_mutex_lock(&mutex);
+
+    /*Acquire permission to use IPC*/
+    pthread_mutex_lock(&ipc_mutex);
 
     _ASSERT(engine != NULL, DCE_EINVALID_INPUT);
 
@@ -306,7 +316,8 @@ Void Engine_close(Engine_Handle engine)
 EXIT:
     dce_ipc_deinit(coreIdx);
 
-    pthread_mutex_unlock(&mutex);
+    /*Relinquish IPC*/
+    pthread_mutex_unlock(&ipc_mutex);
 
     return;
 }
@@ -333,6 +344,10 @@ static void *create(Engine_Handle engine, String name, void *params, dce_codec_t
     char                *codec_name = NULL;
     int                 coreIdx = INVALID_CORE;
 
+
+    /*Acquire permission to use IPC*/
+    pthread_mutex_lock(&ipc_mutex);
+
     _ASSERT(name != '\0', DCE_EINVALID_INPUT);
     _ASSERT(engine != NULL, DCE_EINVALID_INPUT);
     _ASSERT(params != NULL, DCE_EINVALID_INPUT);
@@ -354,12 +369,16 @@ static void *create(Engine_Handle engine, String name, void *params, dce_codec_t
     /* Invoke the Remote function through MmRpc */
     coreIdx = getCoreIndexFromCodec(codec_id);
     _ASSERT(coreIdx != INVALID_CORE, DCE_EINVALID_INPUT);
+
     eError = MmRpc_call(MmRpcHandle[coreIdx], &fxnCtx, (int32_t *)(&codec_handle));
+
     /* In case of Error, the Application will get a NULL Codec Handle */
     _ASSERT_AND_EXECUTE(eError == DCE_EOK, DCE_EIPC_CALL_FAIL, codec_handle = NULL);
 
 EXIT:
     memplugin_free(codec_name);
+    /*Relinquish IPC*/
+    pthread_mutex_unlock(&ipc_mutex);
     return ((void *)codec_handle);
 }
 
@@ -385,6 +404,10 @@ static XDAS_Int32 control(void *codec, int id, void *dynParams, void *status, dc
     dce_error_status    eError = DCE_EOK;
     int                 coreIdx = INVALID_CORE;
 
+
+    /*Acquire permission to use IPC*/
+    pthread_mutex_lock(&ipc_mutex);
+
     _ASSERT(codec != NULL, DCE_EINVALID_INPUT);
     _ASSERT(dynParams != NULL, DCE_EINVALID_INPUT);
     _ASSERT(status != NULL, DCE_EINVALID_INPUT);
@@ -403,10 +426,11 @@ static XDAS_Int32 control(void *codec, int id, void *dynParams, void *status, dc
     coreIdx = getCoreIndexFromCodec(codec_id);
     _ASSERT(coreIdx != INVALID_CORE, DCE_EINVALID_INPUT);
     eError = MmRpc_call(MmRpcHandle[coreIdx], &fxnCtx, &fxnRet);
-
     _ASSERT(eError == DCE_EOK, DCE_EIPC_CALL_FAIL);
 
 EXIT:
+    /*Relinquish IPC*/
+    pthread_mutex_unlock(&ipc_mutex);
     return (fxnRet);
 
 }
@@ -436,6 +460,10 @@ static XDAS_Int32 get_version(void *codec, void *dynParams, void *status, dce_co
     int32_t             fxnRet;
     dce_error_status    eError = DCE_EOK;
     int                 coreIdx = INVALID_CORE;
+
+
+    /*Acquire permission to use IPC*/
+    pthread_mutex_lock(&ipc_mutex);
 
     _ASSERT(codec != NULL, DCE_EINVALID_INPUT);
     _ASSERT(dynParams != NULL, DCE_EINVALID_INPUT);
@@ -468,10 +496,11 @@ static XDAS_Int32 get_version(void *codec, void *dynParams, void *status, dce_co
     coreIdx = getCoreIndexFromCodec(codec_id);
     _ASSERT(coreIdx != INVALID_CORE, DCE_EINVALID_INPUT);
     eError = MmRpc_call(MmRpcHandle[coreIdx], &fxnCtx, &fxnRet);
-
     _ASSERT(eError == DCE_EOK, DCE_EIPC_CALL_FAIL);
 
 EXIT:
+    /*Relinquish IPC*/
+    pthread_mutex_unlock(&ipc_mutex);
     return (fxnRet);
 }
 
@@ -519,6 +548,10 @@ static XDAS_Int32 process(void *codec, void *inBufs, void *outBufs,
     int32_t    inbuf_offset[MAX_INPUT_BUF];
     int32_t    outbuf_offset[MAX_OUTPUT_BUF];
 #endif
+
+
+    /*Acquire permission to use IPC*/
+    pthread_mutex_lock(&ipc_mutex);
 
     _ASSERT(codec != NULL, DCE_EINVALID_INPUT);
     _ASSERT(inBufs != NULL, DCE_EINVALID_INPUT);
@@ -655,7 +688,6 @@ static XDAS_Int32 process(void *codec, void *inBufs, void *outBufs,
     /* Invoke the Remote function through MmRpc */
     coreIdx = getCoreIndexFromCodec(codec_id);
     _ASSERT(coreIdx != INVALID_CORE, DCE_EINVALID_INPUT);
-
     eError = MmRpc_call(MmRpcHandle[coreIdx], &fxnCtx, &fxnRet);
     _ASSERT(eError == DCE_EOK, DCE_EIPC_CALL_FAIL);
 
@@ -679,6 +711,8 @@ static XDAS_Int32 process(void *codec, void *inBufs, void *outBufs,
     eError = (dce_error_status)(fxnRet);
 
 EXIT:
+    /*Relinquish IPC*/
+    pthread_mutex_unlock(&ipc_mutex);
     return (eError);
 }
 
@@ -696,6 +730,10 @@ static void delete(void *codec, dce_codec_type codec_id)
     dce_error_status    eError = DCE_EOK;
     int                 coreIdx = INVALID_CORE;
 
+
+    /*Acquire permission to use IPC*/
+    pthread_mutex_lock(&ipc_mutex);
+
     _ASSERT(codec != NULL, DCE_EINVALID_INPUT);
 
     /* Marshall function arguments into the send buffer */
@@ -706,11 +744,12 @@ static void delete(void *codec, dce_codec_type codec_id)
     /* Invoke the Remote function through MmRpc */
     coreIdx = getCoreIndexFromCodec(codec_id);
     _ASSERT(coreIdx != INVALID_CORE, DCE_EINVALID_INPUT);
-
     eError = MmRpc_call(MmRpcHandle[coreIdx], &fxnCtx, &fxnRet);
     _ASSERT(eError == DCE_EOK, DCE_EIPC_CALL_FAIL);
 
 EXIT:
+    /*Relinquish IPC*/
+    pthread_mutex_unlock(&ipc_mutex);
     return;
 }
 
