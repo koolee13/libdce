@@ -164,13 +164,15 @@ static int dce_ipc_init(int core)
 
     DEBUG(" >> dce_ipc_init\n");
 
-    /* Create remote server insance */
-    __ClientCount[core]++;
-
-    if(__ClientCount[core] > MAX_INSTANCES) {
+	/*First check if maximum clients are already using ipc*/
+    if(__ClientCount[core] >= MAX_INSTANCES) {
         eError = DCE_EXDM_UNSUPPORTED;
         return (eError);
     }
+
+    /* Create remote server insance */
+    __ClientCount[core]++;
+
     if(__ClientCount[core] > 1) {
          goto EXIT;
     }
