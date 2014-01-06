@@ -17,7 +17,7 @@ CE_CFLAGS                    = \
                                -I$(top_srcdir)/packages/xdais \
                                -I$(top_srcdir)/packages/xdctools \
                                -I$(top_srcdir)/packages/framework_components \
-                               -I$(IPC_HEADERS)/ \
+                               `pkg-config --cflags libmmrpc` \
 			       -DBUILDOS_LINUX=1 -DDCE_DEBUG_LEVEL=1 \
 			       -DDCE_DEBUG_ENABLE=1 \
                                -Wno-pointer-to-int-cast
@@ -25,8 +25,8 @@ CE_CFLAGS                    = \
 
 libdce_la_SOURCES            = libdce.c memplugin_linux.c libdce_linux.c
 libdce_la_CFLAGS             = $(WARN_CFLAGS) $(CE_CFLAGS) $(DRM_CFLAGS)
-libdce_la_LDFLAGS            = -no-undefined -version-info 1:0:0
-libdce_la_LIBADD             = $(DRM_LIBS) -lmmrpc
+libdce_la_LDFLAGS            = -no-undefined -version-info 1:0:0 `pkg-config --libs libmmrpc`
+libdce_la_LIBADD             = $(DRM_LIBS)
 
 libdce_la_includedir         = $(includedir)/dce
 libdce_la_include_HEADERS    = libdce.h

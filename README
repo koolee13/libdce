@@ -77,7 +77,7 @@ INSTALL_ROOT/armle-v7/bin/dce_enc_test
 ########################## For Linux ##########################
 
 Exporting LIBDCE variables:
-export IPC_HEADERS=<path to IPC Headers> (MmRpc.h)
+None
 
 Building:
 
