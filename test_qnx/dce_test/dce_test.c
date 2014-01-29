@@ -62,8 +62,6 @@
 
 #include "ti/shmemallocator/SharedMemoryAllocatorUsr.h"
 
-#define OMAP5
-
 #define PRINT_DEBUG
 #define ERROR(FMT, ...)  printf("%s:%d:\t%s\terror: " FMT "\n", __FILE__, __LINE__, __FUNCTION__, ##__VA_ARGS__)
 // enable below to print debug information
@@ -180,7 +178,7 @@ static void *tiler_alloc(int width, int height)
 
         bufPtr = MemMgr_Alloc(blocks, dimensions);
     }
-    DEBUG("tiler alloc return bufPtr %p", bufPtr);
+    DEBUG("tiler alloc return bufPtr %p PA 0x%x", bufPtr, TilerMem_VirtToPhys(bufPtr));
 
     return (bufPtr);
 }
@@ -873,11 +871,8 @@ int main(int argc, char * *argv)
             DEBUG("dce_alloc VIDDEC3_Params successful mpeg4_params=%p", mpeg4_params);
 
             err = msync((Ptr)mpeg4_params, sizeof(IMPEG4VDEC_Params), MS_CACHE_ONLY | MS_SYNC);
-#ifdef OMAP5
+
             codec = VIDDEC3_create(engine, "ivahd_mpeg4dec", (VIDDEC3_Params *)mpeg4_params);
-#else
-            codec = VIDDEC3_create(engine, "ivahd_mpeg4vdec", (VIDDEC3_Params *)mpeg4_params);
-#endif
             break;
 
         case DCE_TEST_VC1SMP :
