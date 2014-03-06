@@ -1404,7 +1404,7 @@ int main(int argc, char * *argv)
                     buf = (OutputBuffer *)outArgs->outputID[i];
                     DEBUG("pop: %d (%p)", out_cnt, buf);
 
-                    if( out_cnt < 300 ) {  // write first 300 frames to output file
+                    if( out_cnt < frames_to_write ) {  // write  first frames_to_write frames to output file as
                         write_output(out_pattern, out_cnt++, buf->buf + yoff,
                                      buf->buf + uvoff, padded_width);
                     } else {
