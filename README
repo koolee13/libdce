@@ -493,7 +493,7 @@ If (BUILDOS_LINUX) {
 ************ Version Info of Headers included in packages folder ***********
 
 Tools:
-XDC version  : xdctools_3_25_04_88
+XDC version  : xdctools_3_25_05_94
 CE version   : codec_engine_3_24_00_08
 XDAIS version: xdais_7_24_00_04
 FC version: framework_components_3_24_02_15
