@@ -1,13 +1,13 @@
 ****************************** LIBDCE README ******************************
 
-The libDCE component provides an interface for applications running on the
+The LIBDCE component provides an interface for applications running on the
 MPU (HLOS) to invoke the Codec Engine APIs on the remote core (IPU). It
 enables the Video Encode/Decode Usecases. Apart from the exposed CE APIs,
 it provides a memplugin utility to allocate memory that can be read/written
 from the remote IPU core.
 
 This ReadMe file comprises:
-1. LibDCE Build Information
+1. LIBDCE Build Information
    a. For QNX
    b. For Linux
    c. For Android
@@ -62,10 +62,10 @@ $(IPCHEADERS)/usr/include/ti/shmemallocator
 $(IPCHEADERS)/usr/include/
 
 Building:
-make install
+make -f Makefile.qnx install
 
 Clean:
-make clean
+make -f Makefile.qnx clean
 
 Location of Binaries:
 INSTALL_ROOT/armle-v7/usr/lib/libdce.so
@@ -319,94 +319,12 @@ Void Engine_close(Engine_Handle engine)
 
 ############################ libDCE APIs ############################
 
-/*==================================================================*/
-/** dce_alloc          : Allocate the Data structures passed to
- *                       codec-engine APIs except Input/Output buffers.
- * @ param sz    [in]  : Size of memory to be allocated.
- * @ return            : Pointer to allocated memory.
- */
-void *dce_alloc(int sz)
-
-
-/*==================================================================*/
-/** dce_free           : Free the Data structures passed to codec-engine APIs
- *                       allocated through the dce_alloc() API.
- * @ param ptr   [in]  : Pointer to allocated memory.
- */
-void dce_free(void *ptr)
-
-
-/*================ The below APIs are LINUX specifc ================*/
-/*==================================================================*/
-/** dce_init           : Initialize DCE. Only Linux applications
- *                       should call this API.
- * @ return            : Pointer to omap_device structure.
- */
-void *dce_init(void)
-
-
-/*===============================================================*/
-/** dce_deinit         : Deinitialize DCE. Only Linux applications
- *                       should call this API.
- * @ param dev    [in] : Pointer to omap_device structure.
- */
-void dce_deinit(void *dev)
-
-
-/*===============================================================*/
-/** dce_buf_lock          : Pin or lock Tiler Buffers which would be
- *                          used by the codec as reference buffers.
- *                          Only Linux applications should call this API.
- * @ param num    [in]    : Number of buffers to be locked.
- * @ param handle [in]    : Pointer to array of DMA Buf FDs of the
- *                          buffers to be locked.
- * @ return               : DCE error status is returned.
- *                #DCE_EOK              [0]  : Success.
- *                #DCE_EOUT_OF_MEMORY   [-2] : Out of Shared/Tiler Memory.
- *                #DCE_EIPC_CALL_FAIL   [-5] : MmRpc Call failed.
- *                #DCE_EINVALID_INPUT   [-6] : Invalid Inputs.
- */
-int dce_buf_lock(int num, size_t *handle)
-
-
-/*===============================================================*/
-/** dce_buf_unlock       : Unpin or unlock Tiler Buffers which were
- *                         locked to be used by the codec as
- *                         reference buffers. Only Linux
- *                         applications should call this API.
- * @ param num    [in]   : Number of buffers to be unlocked.
- * @ param handle [in]   : Pointer to array of DMA Buf FDs of
- *                         the buffers to be unlocked.
- * @ return              : DCE error status is returned.
- *                #DCE_EOK              [0]  : Success.
- *                #DCE_EXDM_FAIL        [-1] : XDM Failure.
- *                #DCE_EOUT_OF_MEMORY   [-2] : Out of Shared/Tiler Memory.
- *                #DCE_EXDM_UNSUPPORTED [-3] : Unsupported XDM request.
- *                #DCE_EIPC_CALL_FAIL   [-5] : MmRpc Call failed.
- *                #DCE_EINVALID_INPUT   [-6] : Invalid Inputs.
- */
-int dce_buf_unlock(int num, size_t *handle)
-
-
-/*===============================================================*/
-/** dce_get_fd         : Get OMAP DRM File Descriptor. Only Linux
- *                       applications should call this API.
- * @ return            : OMAP DRM File Descriptor.
- */
-int dce_get_fd()
-
-
-/*===============================================================*/
-/** dce_set_fd         : Set OMAP DRM File Descriptor. Only Linux
- *                       applications should call this API.
- * @ param fd    [in]  : OMAP DRM File Descriptor.
- */
-void dce_set_fd(int fd)
+See libdce.h
 
 
 ******************************* API call flow ******************************
 
-// For a Decoder Application
+// For example of a Decoder Application - using CE video3 interfaces to IPU (IVA-HD)
 If (BUILDOS_LINUX) {
     dev = dce_init()
 }
