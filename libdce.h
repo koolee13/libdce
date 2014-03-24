@@ -61,7 +61,8 @@ typedef enum dce_error_status {
 /***************************** Memory Allocation/Free APIs *****************************/
 /*=====================================================================================*/
 /** dce_alloc               : Allocate the Data structures passed to codec-engine APIs
- *                             except Input/Output buffers.
+ *                            except Input/Output buffers. This should be used for all
+ *                            Parameter allocation needed for IPU remote proc.
  *
  * @ param sz    [in]       : Size of memory to be allocated.
  * @ return                 : Pointer to allocated memory.
@@ -69,12 +70,29 @@ typedef enum dce_error_status {
 void *dce_alloc(int sz);
 
 /*=====================================================================================*/
+/** dsp_dce_alloc            : Allocate the Data structures passed to codec-engine APIs
+ *                             except Input/Output buffers. This should be used for all
+ *                             Parameter allocation needed for DSP remote proc.
+ *
+ * @ param sz    [in]       : Size of memory to be allocated.
+ * @ return                 : Pointer to allocated memory.
+ */
+void *dsp_dce_alloc(int sz);
+
+/*=====================================================================================*/
 /** dce_free                : Free the Data structures passed to codec-engine APIs
  *                             except Input/Output buffers.
  *
- * @ param ptr   [in]       : Pointer to allocated memory.
+ * @ param ptr   [in]       : Memory allocated by dce_alloc.
  */
 void dce_free(void *ptr);
+
+/*=====================================================================================*/
+/** dsp_dce_free            : Free the memory
+ *
+ * @ param ptr   [in]       : memory allocated by dsp_dce_alloc .
+ */
+void dsp_dce_free(void *ptr);
 
 
 /*********************************** APIs for Linux ***********************************/

@@ -39,13 +39,18 @@ extern struct omap_device   *OmapDev;
 /*  memplugin_alloc - allocates omap_bo buffer with a header above it.
  *  @sz: Size of the buffer requsted
  *  @height: this parameter is currently not used
- *  @memory_type : Currently dce_alloc is used on for parameter buffer
+ *  @region :Used to specify the region from where the memory is allocated->Not used.
+ *  @align:Alignment. Not used
+ *  @flags: Bit field. As of now, only the least significant 4 bits are considered
+ *          to identify the core for which this allocation is needed. This information
+ *          is needed to use the right tiler pin/unpin APIs (DSP or IPU).
+ *          For future extensibility, many more attributes can be added as bit fields.
  *  Returns a virtual address pointer to omap_bo buffer or the param buffer
  */
 void *memplugin_alloc(int sz, int height, MemRegion region, int align, int flags)
 {
     MemHeader        *h;
-    struct omap_bo   *bo = omap_bo_new(OmapDev, sz + sizeof(MemHeader), OMAP_BO_CACHED);
+    struct omap_bo   *bo = omap_bo_new(OmapDev, sz + sizeof(MemHeader), OMAP_BO_WC);
 
     if( !bo ) {
         return (NULL);
@@ -55,11 +60,17 @@ void *memplugin_alloc(int sz, int height, MemRegion region, int align, int flags
     memset(H2P(h), 0, sz);
     h->size = sz;
     h->ptr = (void *)bo;
-    h->dma_buf_fd = 0;
+    /* get the fd from drm which needs to be closed by memplugin_free */
+    h->dma_buf_fd = omap_bo_dmabuf(bo);
     h->region = region;
+    h->flags = flags;/*Beware: This is a bit field.*/
+    /* lock the file descriptor */
+    if((flags & 0x0f) == DSP) /*Only the last 4 bits are considered*/
+        dsp_dce_buf_lock(1, &(h->dma_buf_fd));
+    else
+        dce_buf_lock(1, &(h->dma_buf_fd));
 
     return (H2P(h));
-
 }
 
 /*
@@ -70,6 +81,20 @@ void memplugin_free(void *ptr)
 {
     if( ptr ) {
         MemHeader   *h = P2H(ptr);
+        if( h->dma_buf_fd ) {
+            /*
+            Identify the core for which this memory was allocated and
+            use the appropriate API. Last 4 bits of flags are assumed
+            to be containing core Id information.
+            */
+            if((h->flags & 0x0f) == DSP)
+                dsp_dce_buf_unlock(1, &(h->dma_buf_fd));
+            else
+                dce_buf_unlock(1, &(h->dma_buf_fd));
+            /* close the file descriptor */
+            close(h->dma_buf_fd);
+        }
+        /*Finally, Delete the buffer object*/
         omap_bo_del((struct omap_bo *)h->ptr);
     }
 }
@@ -82,11 +107,8 @@ int32_t memplugin_share(void *ptr)
 {
     if( ptr ) {
         MemHeader   *h = P2H(ptr);
-        if( !h->dma_buf_fd ) {
-            h->dma_buf_fd = omap_bo_dmabuf((struct omap_bo *)h->ptr);
-        }
-        return (h->dma_buf_fd);
+        if( h->dma_buf_fd )
+             return (h->dma_buf_fd);
     }
     return (-1);
 }
-

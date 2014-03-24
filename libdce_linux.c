@@ -133,10 +133,23 @@ EXIT:
     }
     return (eError);
 }
-/*These two are duplicate of above two functions
-  These have been added temporarily since there is no
-  other way to get the core index.These have been
- added to avoid modifying the current apis */
+
+/*Memory Management mirror APIs for DSP remoteproc targets*/
+void *dsp_dce_alloc(int sz)
+{
+    /*
+      Beware: The last argument is a bit field. As of now only core ID
+      is considered to be there in the last 4 bits of the word.
+    */
+    return (memplugin_alloc(sz, 1, MEM_TILER_1D, 0, DSP));
+}
+
+void dsp_dce_free(void *ptr)
+{
+    memplugin_free(ptr);
+}
+
+
 int dsp_dce_buf_lock(int num, size_t *handle)
 {
     int                 i;
