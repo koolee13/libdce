@@ -70,12 +70,6 @@ typedef enum dce_codec_type {
     OMAP_DCE_VIDDEC2 = 3
 } dce_codec_type;
 
-typedef enum dce_core_type {
-    INVALID_CORE = -1,
-    IPU = 0,
-    DSP = 1,
-    MAX_REMOTEDEVICES
-}dce_core_type;
 
 /* Structures of RPC */
 typedef struct dce_connect {

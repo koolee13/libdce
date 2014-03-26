@@ -74,6 +74,7 @@ typedef struct MemHeader {
     uint32_t offset;    /* offset for the actual data with in the buffer */
     int32_t map_fd;     /* mmapped fd */
     void * handle;      /*custom handle for the HLOS memallocator*/
+    int flags; /*memory attributes*/
 } MemHeader;
 
 typedef enum MemoryRegion {
@@ -84,6 +85,13 @@ typedef enum MemoryRegion {
     MEM_SHARED,
     MEM_MAX
 } MemRegion;
+
+typedef enum core_type {
+    INVALID_CORE = -1,
+    IPU = 0,
+    DSP = 1,
+    MAX_REMOTEDEVICES
+}core_type;
 
 /* DCE Error Types */
 typedef enum mem_error_status {

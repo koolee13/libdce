@@ -140,11 +140,15 @@ static int __inline getCoreIndexFromEngine(Engine_Handle engine)
 }
 
 /***************** FUNCTIONS ********************************************/
-/* Interface for QNX for parameter buffer allocation                    */
+/* Interface for QNX/Linux for parameter buffer allocation                    */
 /* These interfaces are implemented to maintain Backward Compatability  */
 void *dce_alloc(int sz)
 {
-    return (memplugin_alloc(sz, 1, MEM_TILER_1D, 0, 0));
+    /*
+      Beware: The last argument is a bit field. As of now only core ID
+      is considered to be there in the last 4 bits of the word
+    */
+    return (memplugin_alloc(sz, 1, MEM_TILER_1D, 0, IPU));
 }
 
 void dce_free(void *ptr)
@@ -243,11 +247,11 @@ Engine_Handle Engine_open(String name, Engine_Attrs *attrs, Engine_Error *ec)
     INFO(">> Engine_open Params::name = %s size = %d\n", name, strlen(name));
     /* Allocate Shared memory for the engine_open rpc msg structure*/
     /* Tiler Memory preferred in QNX */
-    engine_open_msg = memplugin_alloc(sizeof(dce_engine_open), 1, DEFAULT_REGION, 0, 0);
+    engine_open_msg = memplugin_alloc(sizeof(dce_engine_open), 1, DEFAULT_REGION, 0, coreIdx);
     _ASSERT_AND_EXECUTE(engine_open_msg != NULL, DCE_EOUT_OF_MEMORY, engine_handle = NULL);
 
     if( attrs ) {
-         engine_attrs = memplugin_alloc(sizeof(Engine_Attrs), 1, DEFAULT_REGION, 0, 0);
+         engine_attrs = memplugin_alloc(sizeof(Engine_Attrs), 1, DEFAULT_REGION, 0, coreIdx);
          _ASSERT_AND_EXECUTE(engine_attrs != NULL, DCE_EOUT_OF_MEMORY, engine_handle = NULL);
          *engine_attrs = *attrs;
     }
@@ -352,8 +356,11 @@ static void *create(Engine_Handle engine, String name, void *params, dce_codec_t
     _ASSERT(engine != NULL, DCE_EINVALID_INPUT);
     _ASSERT(params != NULL, DCE_EINVALID_INPUT);
 
+    coreIdx = getCoreIndexFromCodec(codec_id);
+    _ASSERT(coreIdx != INVALID_CORE, DCE_EINVALID_INPUT);
+
     /* Allocate shared memory for translating codec name to IPU */
-    codec_name = memplugin_alloc(MAX_NAME_LENGTH * sizeof(char), 1, DEFAULT_REGION, 0, 0);
+    codec_name = memplugin_alloc(MAX_NAME_LENGTH * sizeof(char), 1, DEFAULT_REGION, 0, coreIdx);
     _ASSERT_AND_EXECUTE(codec_name != NULL, DCE_EOUT_OF_MEMORY, codec_handle = NULL);
 
     strncpy(codec_name, name, strlen(name));
@@ -367,9 +374,6 @@ static void *create(Engine_Handle engine, String name, void *params, dce_codec_t
     Fill_MmRpc_fxnCtx_OffPtr_Params(&(fxnCtx.params[3]), GetSz(params), P2H(params),
                                     sizeof(MemHeader),  memplugin_share(params));
     /* Invoke the Remote function through MmRpc */
-    coreIdx = getCoreIndexFromCodec(codec_id);
-    _ASSERT(coreIdx != INVALID_CORE, DCE_EINVALID_INPUT);
-
     eError = MmRpc_call(MmRpcHandle[coreIdx], &fxnCtx, (int32_t *)(&codec_handle));
 
     /* In case of Error, the Application will get a NULL Codec Handle */
@@ -412,6 +416,9 @@ static XDAS_Int32 control(void *codec, int id, void *dynParams, void *status, dc
     _ASSERT(dynParams != NULL, DCE_EINVALID_INPUT);
     _ASSERT(status != NULL, DCE_EINVALID_INPUT);
 
+    coreIdx = getCoreIndexFromCodec(codec_id);
+    _ASSERT(coreIdx != INVALID_CORE, DCE_EINVALID_INPUT);
+
     /* Marshall function arguments into the send buffer */
     Fill_MmRpc_fxnCtx(&fxnCtx, DCE_RPC_CODEC_CONTROL, 5, 0, NULL);
     Fill_MmRpc_fxnCtx_Scalar_Params(&(fxnCtx.params[0]), sizeof(int32_t), codec_id);
@@ -423,8 +430,6 @@ static XDAS_Int32 control(void *codec, int id, void *dynParams, void *status, dc
                                     sizeof(MemHeader), memplugin_share(status));
 
     /* Invoke the Remote function through MmRpc */
-    coreIdx = getCoreIndexFromCodec(codec_id);
-    _ASSERT(coreIdx != INVALID_CORE, DCE_EINVALID_INPUT);
     eError = MmRpc_call(MmRpcHandle[coreIdx], &fxnCtx, &fxnRet);
     _ASSERT(eError == DCE_EOK, DCE_EIPC_CALL_FAIL);
 
@@ -469,6 +474,9 @@ static XDAS_Int32 get_version(void *codec, void *dynParams, void *status, dce_co
     _ASSERT(dynParams != NULL, DCE_EINVALID_INPUT);
     _ASSERT(status != NULL, DCE_EINVALID_INPUT);
 
+    coreIdx = getCoreIndexFromCodec(codec_id);
+    _ASSERT(coreIdx != INVALID_CORE, DCE_EINVALID_INPUT);
+
     if( codec_id == OMAP_DCE_VIDDEC3 ) {
          version_buf = (void * *)(&(((IVIDDEC3_Status *)status)->data.buf));
     } else if( codec_id == OMAP_DCE_VIDENC2 ) {
@@ -493,8 +501,6 @@ static XDAS_Int32 get_version(void *codec, void *dynParams, void *status, dce_co
          (size_t)P2H(*version_buf), memplugin_share(*version_buf));
 
     /* Invoke the Remote function through MmRpc */
-    coreIdx = getCoreIndexFromCodec(codec_id);
-    _ASSERT(coreIdx != INVALID_CORE, DCE_EINVALID_INPUT);
     eError = MmRpc_call(MmRpcHandle[coreIdx], &fxnCtx, &fxnRet);
     _ASSERT(eError == DCE_EOK, DCE_EIPC_CALL_FAIL);
 
@@ -558,6 +564,9 @@ static XDAS_Int32 process(void *codec, void *inBufs, void *outBufs,
     _ASSERT(outBufs != NULL, DCE_EINVALID_INPUT);
     _ASSERT(inArgs != NULL, DCE_EINVALID_INPUT);
     _ASSERT(outArgs != NULL, DCE_EINVALID_INPUT);
+
+    coreIdx = getCoreIndexFromCodec(codec_id);
+    _ASSERT(coreIdx != INVALID_CORE, DCE_EINVALID_INPUT);
 
     if( codec_id == OMAP_DCE_VIDDEC3 ) {
          numInBufs = ((XDM2_BufDesc *)inBufs)->numBufs;
@@ -686,8 +695,6 @@ static XDAS_Int32 process(void *codec, void *inBufs, void *outBufs,
     }
 
     /* Invoke the Remote function through MmRpc */
-    coreIdx = getCoreIndexFromCodec(codec_id);
-    _ASSERT(coreIdx != INVALID_CORE, DCE_EINVALID_INPUT);
     eError = MmRpc_call(MmRpcHandle[coreIdx], &fxnCtx, &fxnRet);
     _ASSERT(eError == DCE_EOK, DCE_EIPC_CALL_FAIL);
 
@@ -735,6 +742,8 @@ static void delete(void *codec, dce_codec_type codec_id)
     pthread_mutex_lock(&ipc_mutex);
 
     _ASSERT(codec != NULL, DCE_EINVALID_INPUT);
+    coreIdx = getCoreIndexFromCodec(codec_id);
+    _ASSERT(coreIdx != INVALID_CORE, DCE_EINVALID_INPUT);
 
     /* Marshall function arguments into the send buffer */
     Fill_MmRpc_fxnCtx(&fxnCtx, DCE_RPC_CODEC_DELETE, 2, 0, NULL);
@@ -742,8 +751,6 @@ static void delete(void *codec, dce_codec_type codec_id)
     Fill_MmRpc_fxnCtx_Scalar_Params(&(fxnCtx.params[1]), sizeof(int32_t), (int32_t)codec);
 
     /* Invoke the Remote function through MmRpc */
-    coreIdx = getCoreIndexFromCodec(codec_id);
-    _ASSERT(coreIdx != INVALID_CORE, DCE_EINVALID_INPUT);
     eError = MmRpc_call(MmRpcHandle[coreIdx], &fxnCtx, &fxnRet);
     _ASSERT(eError == DCE_EOK, DCE_EIPC_CALL_FAIL);
 
