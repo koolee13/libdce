@@ -35,3 +35,5 @@ src/ti/framework/dce/package/
 nto
 test_qnx/dce_enc_test/arm
 test_qnx/dce_test/arm
+Makefile
+*.out
