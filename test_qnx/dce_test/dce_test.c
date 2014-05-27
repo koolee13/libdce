@@ -1197,8 +1197,8 @@ int main(int argc, char * *argv)
             /*
              * Input buffer has data to be decoded.
              */
-            inArgs->inputID = (XDAS_Int32)buf;
             if( !outBufsInUse ) {
+                inArgs->inputID = (XDAS_Int32)buf;  // Set inputID to output buf; when outBufsInUse is TRUE, then leave inputID to the previous one.
                 outBufs->numBufs = 2;
                 outBufs->descs[0].buf = (XDAS_Int8 *)buf->y;
                 outBufs->descs[1].buf = (XDAS_Int8 *)buf->uv;
