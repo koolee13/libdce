@@ -99,6 +99,7 @@ void *memplugin_alloc(int sz, int height, MemRegion region, int align, int flags
         return (H2P(h));
     }
 EXIT:
+    DEBUG("memplugin_alloc eError=%d", eError);
     return (NULL);
 }
 
@@ -122,7 +123,8 @@ void memplugin_free(void *ptr)
     } else {
         ERROR("Tiler 2D Allocation/Free not implemented");
     }
-EXIT:;
+EXIT:
+    DEBUG("memplugin_free eError=%d", eError);
 }
 
 inline int32_t memplugin_share(void *ptr)
