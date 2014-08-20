@@ -585,7 +585,6 @@ int main(int argc, char * *argv)
     char             vid_codec[10];
     char             tilerbuffer[10];
     unsigned int     codec_switch = 0;
-    unsigned int     vc1_flush = 0;
     Bool             outBufsInUse = FALSE;
 
 #ifdef PROFILE_TIME
@@ -662,12 +661,10 @@ int main(int argc, char * *argv)
     } else if((!(strcmp(vid_codec, "vc1smp")))) {
         ivahd_decode_type = IVAHD_VC1SMP_DECODE;
         codec_switch = DCE_TEST_VC1SMP;
-        vc1_flush = 1;
 
     } else if((!(strcmp(vid_codec, "vc1ap")))) {
         ivahd_decode_type = IVAHD_VC1AP_DECODE;
         codec_switch = DCE_TEST_VC1AP;
-        vc1_flush = 1;
 
     } else if((!(strcmp(vid_codec, "mjpeg")))) {
         ivahd_decode_type = IVAHD_JPEGV_DECODE;

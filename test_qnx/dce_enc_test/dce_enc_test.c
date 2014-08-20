@@ -354,13 +354,11 @@ int main(int argc, char * *argv)
     int             mvbufinfo_size = 0;
     char           *in_pattern, *out_pattern;
     int             in_cnt = 0, out_cnt = 0;
-    int             oned;
     InputBuffer    *buf = NULL;
     char            profile[10];
     int             profile_value;
     int             level;
     int             eof = 0;
-    int             ivahd_encode_type;
     char            vid_codec[10];
     char            tilerbuffer[10];
     unsigned int    codec_switch = 0;
@@ -384,11 +382,8 @@ int main(int argc, char * *argv)
 #endif
 
     if( (argc >= 2) && !strcmp(argv[1], "-1") ) {
-        oned = TRUE;
         argc--;
         argv++;
-    } else {
-        oned = FALSE;
     }
 
     if( argc != 10 ) {
@@ -425,7 +420,6 @@ int main(int argc, char * *argv)
  */
 
     if( (!(strcmp(vid_codec, "h264"))) ) {
-        ivahd_encode_type = IVAHD_H264_ENCODE;
         codec_switch = DCE_ENC_TEST_H264;
         if( (!(strcmp(profile, "baseline"))) ) {
             profile_value = IH264_BASELINE_PROFILE;
@@ -461,7 +455,6 @@ int main(int argc, char * *argv)
         }
     } else if( !(strcmp(vid_codec, "mpeg4"))) {
 
-        ivahd_encode_type = IVAHD_MPEG4_ENCODE;
         codec_switch = DCE_ENC_TEST_MPEG4;
 
         if( (!(strcmp(profile, "simple"))) ) {
@@ -488,7 +481,6 @@ int main(int argc, char * *argv)
         }
     } else if( !(strcmp(vid_codec, "h263"))) {
 
-        ivahd_encode_type = IVAHD_H263_ENCODE;
         codec_switch = DCE_ENC_TEST_H263;
 
         if( (!(strcmp(profile, "simple"))) ) {
