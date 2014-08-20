@@ -36,34 +36,34 @@
 /*
  *  ======== [U]Int<n> ========
  */
-typedef signed char xdc_Int8;
-typedef unsigned char xdc_UInt8;
-typedef short xdc_Int16;
-typedef unsigned short xdc_UInt16;
-typedef int xdc_Int32;
+typedef signed char         xdc_Int8;
+typedef unsigned char       xdc_UInt8;
+typedef short               xdc_Int16;
+typedef unsigned short      xdc_UInt16;
+typedef int                xdc_Int32;
 
 #if defined(__ARM_ARCH_7M__) || defined(__ARM_ARCH_7EM__)   /* Cortex M */
-typedef unsigned xdc_UInt32;
+    typedef unsigned            xdc_UInt32;
 #else
-typedef unsigned long xdc_UInt32;
+    typedef unsigned long       xdc_UInt32;
 #endif
 
-__extension__ typedef long long xdc_Int64;
-__extension__ typedef unsigned long long xdc_UInt64;
+__extension__ typedef long long           xdc_Int64;
+__extension__ typedef unsigned long long  xdc_UInt64;
 
 /*
  *  ======== Bits<n> ========
  */
-typedef unsigned char xdc_Bits8;
-typedef unsigned short xdc_Bits16;
-typedef unsigned int xdc_Bits32;
-__extension__ typedef unsigned long long xdc_Bits64;
+typedef unsigned char       xdc_Bits8;
+typedef unsigned short      xdc_Bits16;
+typedef unsigned int       xdc_Bits32;
+__extension__ typedef unsigned long long  xdc_Bits64;
 
 /*
  *  ======== [IU]Arg ========
  */
-typedef long xdc_IArg;
-typedef unsigned long xdc_UArg;
+typedef long            xdc_IArg;
+typedef unsigned long   xdc_UArg;
 
 #define xdc__ARG__
 typedef xdc_IArg xdc_Arg;       /* deprecated, but compatible with BIOS 5.x */
@@ -71,12 +71,12 @@ typedef xdc_IArg xdc_Arg;       /* deprecated, but compatible with BIOS 5.x */
 /*
  *  ======== xdc__META ========
  */
-#define xdc__META(n, s) __attribute__ ((section("xdc.meta"))) const char (n)[] = { s }
+#define xdc__META(n,s) __attribute__ ((section ("xdc.meta"))) const char (n)[] = {s}
 
 #endif /* gnu_targets_STD_ */
 
 /*
- *  @(#) gnu.targets; 1, 0, 1,603; 6-24-2013 15:21:46; /db/ztree/library/trees/xdctargets/xdctargets-g31x/src/ xlibrary
+ *  @(#) gnu.targets; 1, 0, 1,630; 12-19-2013 15:12:00; /db/ztree/library/trees/xdctargets/xdctargets-g41x/src/ xlibrary
 
  */
 
