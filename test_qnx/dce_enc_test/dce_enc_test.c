@@ -228,7 +228,9 @@ static const char *get_path(const char *pattern, int cnt)
         path = realloc(path, len);
     }
 
-    snprintf(path, len - 1, pattern, cnt);
+    if( path ) {
+        snprintf(path, len - 1, pattern, cnt);
+    }
 
     return (path);
 }
@@ -251,7 +253,11 @@ int read_input(const char *pattern, int cnt, char *input)
     int    sz = 0, n = 0, num_planes, i, buf_height;
 
     const char   *path = get_path(pattern, cnt);
-    int           fd = open(path, O_RDONLY);
+    if( path == NULL ) {
+        return (sz);
+    }
+
+    int fd = open(path, O_RDONLY);
 
     //DEBUG("Open file fd %d errno %d", fd, errno);
     if( fd < 0 ) {
@@ -301,7 +307,11 @@ int write_output(const char *pattern, int cnt, char *output, int bytesToWrite)
 {
     int           sz = 0;
     const char   *path = get_path(pattern, cnt);
-    int           fd = open(path, O_WRONLY | O_CREAT | O_APPEND, 0644);
+    if( path == NULL ) {
+        return (sz);
+    }
+
+    int fd = open(path, O_WRONLY | O_CREAT | O_APPEND, 0644);
 
     if( fd < 0 ) {
         ERROR("could open output file: %s (%d)", path, errno);

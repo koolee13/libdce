@@ -404,7 +404,7 @@ EXIT:
 static XDAS_Int32 control(void *codec, int id, void *dynParams, void *status, dce_codec_type codec_id)
 {
     MmRpc_FxnCtx        fxnCtx;
-    int32_t             fxnRet;
+    int32_t             fxnRet = XDM_EFAIL;
     dce_error_status    eError = DCE_EOK;
     int                 coreIdx = INVALID_CORE;
 
@@ -462,7 +462,7 @@ static XDAS_Int32 get_version(void *codec, void *dynParams, void *status, dce_co
     MmRpc_FxnCtx        fxnCtx;
     MmRpc_Xlt           xltAry;
     void             * *version_buf = NULL;
-    int32_t             fxnRet;
+    int32_t             fxnRet = XDM_EFAIL;
     dce_error_status    eError = DCE_EOK;
     int                 coreIdx = INVALID_CORE;
 

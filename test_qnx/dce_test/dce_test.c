@@ -247,6 +247,22 @@ SysLinkMemUtils_translateAddr (UInt32 physAddr)
 
 #endif
 
+void output_free(void)
+{
+    OutputBuffer   *buf = head;
+
+    while((buf=head)) {
+        if( buf->tiler ) {
+            MemMgr_Free(buf->buf);
+        } else {
+            //munmap(buf->buf, buf->len);
+            SHM_release(&buf->shmBuf);
+        }
+        head = buf->next;
+        free(buf);
+    }
+}
+
 int output_allocate(XDM2_BufDesc *outBufs, int cnt,
                     int width, int height, int stride)
 {
@@ -277,6 +293,10 @@ int output_allocate(XDM2_BufDesc *outBufs, int cnt,
 
     while( cnt ) {
         OutputBuffer   *buf = calloc(sizeof(OutputBuffer), 1);
+        if( buf == NULL ) {
+            output_free();
+            return (-ENOMEM);
+        }
 
         DEBUG(" ----------------- create TILER buf 0x%x --------------------", (unsigned int)buf);
 
@@ -305,12 +325,16 @@ int output_allocate_nonTiler(XDM2_BufDesc *outBufs, int cnt,
                              int width, int height, int stride)
 {
     int           tw;
-    XDAS_Int16    y_type, uv_type;
+    XDAS_Int16    y_type = XDM_MEMTYPE_RAW, uv_type = XDM_MEMTYPE_RAW;
 
     outBufs->numBufs = 2;
 
     while( cnt ) {
         OutputBuffer   *buf = calloc(sizeof(OutputBuffer), 1);
+        if( buf == NULL ) {
+            output_free();
+            return (-ENOMEM);
+        }
 
         DEBUG(" ----------------- create nonTILER buf 0x%x --------------------", (unsigned int)buf);
         int    size_y = width * height;
@@ -393,22 +417,6 @@ int output_allocate_nonTiler(XDM2_BufDesc *outBufs, int cnt,
     return (0);
 }
 
-void output_free(void)
-{
-    OutputBuffer   *buf = head;
-
-    while((buf=head)) {
-        if( buf->tiler ) {
-            MemMgr_Free(buf->buf);
-        } else {
-            //munmap(buf->buf, buf->len);
-            SHM_release(&buf->shmBuf);
-        }
-        head = buf->next;
-        free(buf);
-    }
-}
-
 OutputBuffer *output_get(void)
 {
     OutputBuffer   *buf = head;
@@ -443,7 +451,9 @@ static const char *get_path(const char *pattern, int cnt)
         path = realloc(path, len);
     }
 
-    snprintf(path, len - 1, pattern, cnt);
+    if( path ) {
+        snprintf(path, len - 1, pattern, cnt);
+    }
 
     return (path);
 }
@@ -453,7 +463,12 @@ int read_input(const char *pattern, int cnt, char *input)
 {
     int           sz = 0, n = 0;
     const char   *path = get_path(pattern, cnt);
-    int           fd = open(path, O_RDONLY);
+
+    if( path == NULL ) {
+        return (sz);
+    }
+
+    int fd = open(path, O_RDONLY);
 
     //DEBUG("Open file fd %d errno %d", fd, errno);
     /* if we can't find the file, then at the end of stream */
@@ -483,9 +498,14 @@ int read_input(const char *pattern, int cnt, char *input)
 /* helper to write one frame of output */
 int write_output(const char *pattern, int cnt, char *y, char *uv, int stride)
 {
-    int           sz = 0, n, i;
+    int           sz = 0, n = 0, i;
     const char   *path = get_path(pattern, cnt);
-    int           fd = open(path, O_WRONLY | O_CREAT | O_APPEND, 0644);
+
+    if( path == NULL ) {
+        return (sz);
+    }
+
+    int fd = open(path, O_WRONLY | O_CREAT | O_APPEND, 0644);
 
     if( fd < 0 ) {
         ERROR("could open output file: %s (%d)", path, errno);
@@ -582,6 +602,7 @@ int main(int argc, char * *argv)
     unsigned char    frameinput[10] = { "\0" };
     int              eof = 0;
     int              ivahd_decode_type;
+    char             *temp_data = NULL;
     char             vid_codec[10];
     char             tilerbuffer[10];
     unsigned int     codec_switch = 0;
@@ -630,8 +651,10 @@ int main(int argc, char * *argv)
     frameData   = argv[4];
     in_pattern  = argv[5];
     out_pattern = argv[6];
-    strcpy(vid_codec, argv[7]);
-    strcpy(tilerbuffer, argv[8]);
+    temp_data = argv[7];
+    strcpy(vid_codec, temp_data);
+    temp_data = argv[8];
+    strcpy(tilerbuffer, temp_data);
 
     printf("Selected codec: %s\n", vid_codec);
     printf("Selected buffer: %s\n", tilerbuffer);
@@ -684,6 +707,7 @@ int main(int argc, char * *argv)
     DEBUG("frameFile open %p errno %d", frameFile, errno);
     if( frameFile == NULL ) {
         DEBUG("Opening framesize file FAILED");
+        return (1);
     }
 
     /* Read the frame Size from the frame size file */
@@ -691,11 +715,12 @@ int main(int argc, char * *argv)
         frameSize[frameCount] = atoi((char *)frameinput);
         //DEBUG("frameSize[%d] = %d \n", frameCount, frameSize[frameCount]);
 
-        if( frameCount > 64000 ) {
+        frameCount++;
+
+        if( frameCount >= 64000 ) {
             DEBUG("Num Frames %d exceeded MAX limit %d \n", frameCount, 64000);
             goto out;
         }
-        frameCount++;
     }
 
     DEBUG("Num Frames is %d width=%d, height=%d", frameCount, width, height);
@@ -1463,6 +1488,8 @@ out:
     }
 
     output_free();
+
+    fclose(frameFile);
 
     printf("DCE test completed...\n");
 
