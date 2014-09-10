@@ -37,7 +37,7 @@
 #include <errno.h>
 
 /* IPC Headers */
-#include <MmRpc.h>
+#include <ti/ipc/mm/MmRpc.h>
 
 /* DCE Headers */
 #include "libdce.h"
@@ -121,17 +121,22 @@ static int __inline getCoreIndexFromCodec(int codec_id)
          return INVALID_CORE;
 }
 
-static int __inline getCoreIndexFromEngine(Engine_Handle engine)
+static int __inline getCoreIndexFromEngine(Engine_Handle engine, int *tabIdx)
 {
     int i;
     int core = INVALID_CORE;
 
+
+    *tabIdx = -1;
+
     for(i = 0; i < MAX_INSTANCES ; i++) {
         if(engine == gEngineHandle[i][IPU]) {
             core = IPU;
+            *tabIdx = i;
             break;
         }
         else if(engine == gEngineHandle[i][DSP]) {
+            *tabIdx = i;
             core = DSP;
             break;
         }
@@ -195,13 +200,18 @@ EXIT:
 /** dce_ipc_deinit            : DeInitialize MmRpc. This function is called within
  *                              Engine_close().
  */
-static void dce_ipc_deinit(int core)
+static void dce_ipc_deinit(int core, int tableIdx)
 {
+    /*
+      There is no need to validate tableIdx as tableIdx is guaranteed to have
+      valid value when core is valid. core is already validated before coming here.
+    */
     if(__ClientCount[core] == 0) {
         DEBUG("Nothing to be done: a spurious call\n");
         return;
     }
     __ClientCount[core]--;
+    gEngineHandle[tableIdx][core] = 0;
     if( __ClientCount[core] > 0 ) {
          goto EXIT;
     }
@@ -214,6 +224,21 @@ static void dce_ipc_deinit(int core)
 EXIT:
     return;
 }
+
+static inline int update_clients_table(Engine_Handle engine, int core)
+{
+    int i;
+    for(i = 0; i < MAX_INSTANCES; i++)
+    {
+        if(gEngineHandle[i][core] == 0) {
+            gEngineHandle[i][core] = engine;
+            return i;
+        }
+    }
+    return -1;
+}
+
+
 
 /*===============================================================*/
 /** Engine_open        : Open Codec Engine.
@@ -232,6 +257,7 @@ Engine_Handle Engine_open(String name, Engine_Attrs *attrs, Engine_Error *ec)
     Engine_Attrs        *engine_attrs = NULL;
     Engine_Handle       engine_handle = NULL;
     int                 coreIdx   = INVALID_CORE;
+    int                 tabIdx      = -1;
 
 
     /*Acquire permission to use IPC*/
@@ -267,14 +293,16 @@ Engine_Handle Engine_open(String name, Engine_Attrs *attrs, Engine_Error *ec)
 
     /* Invoke the Remote function through MmRpc */
     eError = MmRpc_call(MmRpcHandle[coreIdx], &fxnCtx, (int32_t *)(&engine_handle));
-    gEngineHandle[__ClientCount[coreIdx] - 1][coreIdx] = engine_handle;
-
-    /* In case of Error, the Application will get a NULL Engine Handle */
-    _ASSERT_AND_EXECUTE(eError == DCE_EOK, DCE_EIPC_CALL_FAIL, engine_handle = NULL);
 
     if( ec ) {
          *ec = engine_open_msg->error_code;
     }
+    /* In case of Error, the Application will get a NULL Engine Handle */
+    _ASSERT_AND_EXECUTE(eError == DCE_EOK, DCE_EIPC_CALL_FAIL, engine_handle = NULL);
+
+    /*Update table*/
+    tabIdx = update_clients_table(engine_handle, coreIdx);
+    _ASSERT((tabIdx != -1), DCE_EINVALID_INPUT);
 
 EXIT:
     memplugin_free(engine_open_msg);
@@ -299,6 +327,7 @@ Void Engine_close(Engine_Handle engine)
     int32_t             fxnRet;
     dce_error_status    eError = DCE_EOK;
     int32_t             coreIdx = INVALID_CORE;
+    int                 tableIdx = -1;
 
 
     /*Acquire permission to use IPC*/
@@ -310,7 +339,7 @@ Void Engine_close(Engine_Handle engine)
     Fill_MmRpc_fxnCtx(&fxnCtx, DCE_RPC_ENGINE_CLOSE, 1, 0, NULL);
     Fill_MmRpc_fxnCtx_Scalar_Params(fxnCtx.params, sizeof(Engine_Handle), (int32_t)engine);
 
-    coreIdx = getCoreIndexFromEngine(engine);
+    coreIdx = getCoreIndexFromEngine(engine, &tableIdx);
     _ASSERT(coreIdx != INVALID_CORE,DCE_EINVALID_INPUT);
 
     /* Invoke the Remote function through MmRpc */
@@ -318,7 +347,8 @@ Void Engine_close(Engine_Handle engine)
     _ASSERT(eError == DCE_EOK, DCE_EIPC_CALL_FAIL);
 
 EXIT:
-    dce_ipc_deinit(coreIdx);
+    if(coreIdx != INVALID_CORE)
+        dce_ipc_deinit(coreIdx, tableIdx);
 
     /*Relinquish IPC*/
     pthread_mutex_unlock(&ipc_mutex);
