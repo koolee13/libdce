@@ -545,7 +545,7 @@ int main(int argc, char * *argv)
     engine = Engine_open("ivahd_vidsvr", NULL, &ec);
 
     if( !engine ) {
-        ERROR("fail");
+        ERROR("DCE_ENCODE_TEST_FAIL: ENGINE OPEN FAILED");
         goto out;
     }
 
@@ -609,7 +609,7 @@ int main(int argc, char * *argv)
 
             DEBUG("INPUT TILER buf=%p, buf->buf=%p y=%08x, uv=%08x", buf, buf->buf, buf->y, buf->uv);
         } else {
-            ERROR(" ---------------- tiler_alloc failed --------------------");
+            ERROR("DCE_ENCODE_TEST_FAIL: TILER ALLOCATION FAILED");
             free(buf);
             goto shutdown;
         }
@@ -630,7 +630,7 @@ int main(int argc, char * *argv)
         DEBUG(" ----------------- create NON INPUT TILER buf 0x%x --------------------", (unsigned int)buf);
         err = allocate_nonTiler(&input_nonTiler, width * height * 3/2);
         if( err < 0 ) {
-            ERROR(" ---------------- allocate_nonTiler failed --------------------");
+            ERROR("DCE_ENCODE_TEST_FAIL: NON-TILER ALLOCATION FAILED");
             free(buf);
             goto shutdown;
         }
@@ -944,7 +944,7 @@ int main(int argc, char * *argv)
     }
 
     if( !codec ) {
-        ERROR("fail");
+        ERROR("DCE_ENCODE_TEST_FAIL: CODEC CREATION FAILED");
         goto out;
     }
 
@@ -1146,7 +1146,7 @@ int main(int argc, char * *argv)
     }
 
     if( err ) {
-        ERROR("fail: %d", err);
+        ERROR("DCE_ENCODE_TEST_FAIL: CODEC CONTROL FAILED %d",err);
         goto shutdown;
     }
 
@@ -1184,7 +1184,7 @@ int main(int argc, char * *argv)
         DEBUG("Output allocate through NON-TILER");
         err = allocate_nonTiler(&output_nonTiler, output_size);
         if( err < 0 ) {
-            ERROR("fail: %d", err);
+            ERROR("DCE_ENCODE_TEST_FAIL: NON_TILER ALLOCATION FAILED %d",err);
             goto shutdown;
         }
         output = (char*) output_nonTiler.vir_addr;
@@ -1204,7 +1204,7 @@ int main(int argc, char * *argv)
         else {
             err = allocate_nonTiler(&output_mvbuf_nonTiler, mvbufinfo_size);
             if( err < 0 ) {
-                ERROR("fail: %d", err);
+                ERROR("DCE_ENCODE_TEST_FAIL: NON_TILER ALLOCATION FAILED %d",err);
                 goto shutdown;
             }
             output_mvbuf = (char*) output_mvbuf_nonTiler.vir_addr;
@@ -1409,6 +1409,7 @@ int main(int argc, char * *argv)
                         ERROR("process returned error: %d\n", err);
                         //ERROR("extendedError: %08x", outArgs->extendedError);
                         ERROR("extendedError: %08x", h264enc_outArgs->videnc2OutArgs.extendedError);
+                        ERROR("DCE_ENCODE_TEST_FAIL: CODEC FATAL ERROR");
                         goto shutdown;
                     } else if( eof ) {
                         //ERROR("Codec_process returned err=%d, extendedError=%08x", err, outArgs->extendedError);
@@ -1433,7 +1434,7 @@ int main(int argc, char * *argv)
                 DEBUG("[DCE_ENC_TEST] VIDENC2_process - err %d", err);
                 if( err < 0 ) {
                     //TODO error handling on MPEG4/H.263
-                    ERROR("Codec_process returned err=%d, extendedError=%08x", err, mpeg4enc_outArgs->videnc2OutArgs.extendedError);
+                    ERROR("DCE_ENCODE_TEST_FAIL: CODEC PROCESS RETURNED ERROR : err=%d, extendedError=%08x", err, mpeg4enc_outArgs->videnc2OutArgs.extendedError);
                     goto shutdown;
                 }
                 DEBUG("\n bytesGenerated %d", mpeg4enc_outArgs->videnc2OutArgs.bytesGenerated);

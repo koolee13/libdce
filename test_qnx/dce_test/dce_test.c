@@ -718,7 +718,7 @@ int main(int argc, char * *argv)
         frameCount++;
 
         if( frameCount >= 64000 ) {
-            DEBUG("Num Frames %d exceeded MAX limit %d \n", frameCount, 64000);
+            ERROR("DCE_TEST_FAIL: Num Frames %d exceeded MAX limit %d \n", frameCount, 64000);
             goto out;
         }
     }
@@ -775,7 +775,7 @@ int main(int argc, char * *argv)
     engine = Engine_open("ivahd_vidsvr", NULL, &ec);
 
     if( !engine ) {
-        ERROR("fail");
+        ERROR("DCE_TEST_FAIL: engine open failed");
         goto out;
     }
 
@@ -785,7 +785,7 @@ int main(int argc, char * *argv)
         case DCE_TEST_H264 :
             params = dce_alloc(sizeof(IH264VDEC_Params));
             if( !params ) {
-                ERROR("dce_alloc fail");
+                ERROR("DCE_TEST_FAIL: Parameter memory allocation failed");
                 goto out;
             }
             params->size = sizeof(IH264VDEC_Params);
@@ -797,7 +797,7 @@ int main(int argc, char * *argv)
         case DCE_TEST_MPEG4 :
             params = dce_alloc(sizeof(IMPEG4VDEC_Params));
             if( !params ) {
-                ERROR("dce_alloc fail");
+                ERROR("DCE_TEST_FAIL: Parameter memory allocation failed");
                 goto out;
             }
             params->size = sizeof(IMPEG4VDEC_Params);
@@ -810,7 +810,7 @@ int main(int argc, char * *argv)
         case DCE_TEST_VC1AP :
             params = dce_alloc(sizeof(IVC1VDEC_Params));
             if( !params ) {
-                ERROR("dce_alloc fail");
+                ERROR("DCE_TEST_FAIL: Parameter memory allocation failed");
                 goto out;
             }
             params->size = sizeof(IVC1VDEC_Params);
@@ -822,7 +822,7 @@ int main(int argc, char * *argv)
         case DCE_TEST_MJPEG :
             params = dce_alloc(sizeof(IJPEGVDEC_Params));
             if( !params ) {
-                ERROR("dce_alloc fail");
+                ERROR("DCE_TEST_FAIL: Parameter memory allocation failed");
                 goto out;
             }
             params->size = sizeof(IJPEGVDEC_Params);
@@ -835,7 +835,7 @@ int main(int argc, char * *argv)
         case DCE_TEST_MPEG2 :
             params = dce_alloc(sizeof(IMPEG2VDEC_Params));
             if( !params ) {
-                ERROR("dce_alloc fail");
+                ERROR("DCE_TEST_FAIL: Parameter memory allocation failed");
                 goto out;
             }
             params->size = sizeof(IMPEG2VDEC_Params);
@@ -941,7 +941,7 @@ int main(int argc, char * *argv)
     }
 
     if( !codec ) {
-        ERROR("fail");
+        ERROR("DCE_TEST_FAIL: codec creation failed");
         goto out;
     }
 
@@ -1136,7 +1136,7 @@ int main(int argc, char * *argv)
 #endif
 
     if( err ) {
-        ERROR("fail: %d", err);
+        ERROR("DCE_TEST_FAIL: codec control failed  %d",err);
         goto shutdown;
     }
 
@@ -1177,7 +1177,7 @@ int main(int argc, char * *argv)
 #endif
 
     if( err ) {
-        ERROR("fail: %d", err);
+        ERROR("DCE_TEST_FAIL: buffer allocation failed %d", err);
         goto shutdown;
     }
 
@@ -1199,7 +1199,7 @@ int main(int argc, char * *argv)
         if( !outBufsInUse ) {
             buf = output_get();
             if( !buf ) {
-                ERROR("fail: out of buffers");
+                ERROR("DCE_TEST_FAIL: out of buffers");
                 goto shutdown;
             }
         } else {
@@ -1360,6 +1360,7 @@ int main(int argc, char * *argv)
                 if( XDM_ISFATALERROR(outArgs->extendedError)) {
                     ERROR("process returned error: %d\n", err);
                     ERROR("extendedError: %08x", outArgs->extendedError);
+                    ERROR("DCE_TEST_FAIL: codec fatal error");
                     goto shutdown;
                 } else if( eof ) {
                     /*
