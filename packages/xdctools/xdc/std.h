@@ -240,7 +240,7 @@ typedef xdc_UInt16      UInt16;
 typedef xdc_UInt32      UInt32;
 
 /* DEPRECATED Aliases */
-#ifndef xdc__strict
+#if !defined(xdc__strict) && defined(xdc__deprecated_types)
 #define _TI_STD_TYPES
 
 /* xdc_Arg is defined only in ti/targets/std.h; use IArg and UArg instead */
@@ -349,6 +349,6 @@ typedef xdc_Bits64      Bits64;
 
 #endif /* xdc_std__include */
 /*
- *  @(#) xdc; 1, 1, 1,443; 12-19-2013 19:53:01; /db/ztree/library/trees/xdc/xdc-z63x/src/packages/
+ *  @(#) xdc; 1, 1, 1,476; 3-20-2014 17:05:02; /db/ztree/library/trees/xdc/xdc-A32x/src/packages/
  */
 

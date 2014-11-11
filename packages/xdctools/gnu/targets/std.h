@@ -17,6 +17,11 @@
 #ifndef gnu_targets_STD_
 #define gnu_targets_STD_
 
+/* allow _TI_STD_TYPES like 'Uns' and 'Uint8' */
+#ifndef xdc__deprecated_types
+#define xdc__deprecated_types
+#endif
+
 /* include target-specific "portable" macros */
 #if defined(xdc_target_name__) & !defined(xdc_target_macros_include__)
 #include xdc__local_include(xdc_target_name__)
@@ -76,7 +81,7 @@ typedef xdc_IArg xdc_Arg;       /* deprecated, but compatible with BIOS 5.x */
 #endif /* gnu_targets_STD_ */
 
 /*
- *  @(#) gnu.targets; 1, 0, 1,630; 12-19-2013 15:12:00; /db/ztree/library/trees/xdctargets/xdctargets-g41x/src/ xlibrary
+ *  @(#) gnu.targets; 1, 0, 1,672; 3-17-2014 16:49:45; /db/ztree/library/trees/xdctargets/xdctargets-h18x/src/ xlibrary
 
  */
 
