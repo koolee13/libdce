@@ -105,11 +105,25 @@ void dsp_dce_free(void *ptr);
 void *dce_init(void);
 
 /*===============================================================*/
-/** dce_deinit              : Deinitialize DCE. Only Linux applications are expected to call.
+/** dce_deinit          : Deinitialize DCE . Only Linux applications are expected to call.
  *
  * @ param dev    [in]      : Pointer to omap_device structure.
  */
 void dce_deinit(void *dev);
+
+
+/** dce_ipc_init            : Initialize DCE IPC. this is required to setup mmRpc link.
+ *
+ * @ return                 : Error code.
+ */
+int dce_ipc_init(int core);
+
+/*===============================================================*/
+/** dce_ipc_deinit          : Deinitialize DCE IPC.
+ *
+ * @ param dev    [in]      : Core ID and engine Table Idx, or -1 if no engine exists
+ */
+void dce_ipc_deinit(int core, int tableIdx);
 
 /************************ Input/Output Buffer Lock/Unlock APIs ************************/
 /*=====================================================================================*/

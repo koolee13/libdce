@@ -166,7 +166,7 @@ void dce_free(void *ptr)
  *
  * @ return                 : Error Status.
  */
-static int dce_ipc_init(int core)
+int dce_ipc_init(int core)
 {
     MmRpc_Params        args;
     dce_error_status    eError = DCE_EOK;
@@ -200,18 +200,17 @@ EXIT:
 /** dce_ipc_deinit            : DeInitialize MmRpc. This function is called within
  *                              Engine_close().
  */
-static void dce_ipc_deinit(int core, int tableIdx)
+void dce_ipc_deinit(int core, int tableIdx)
 {
-    /*
-      There is no need to validate tableIdx as tableIdx is guaranteed to have
-      valid value when core is valid. core is already validated before coming here.
-    */
     if(__ClientCount[core] == 0) {
         DEBUG("Nothing to be done: a spurious call\n");
         return;
     }
     __ClientCount[core]--;
-    gEngineHandle[tableIdx][core] = 0;
+
+    if (tableIdx >= 0)
+        gEngineHandle[tableIdx][core] = 0;
+
     if( __ClientCount[core] > 0 ) {
          goto EXIT;
     }

@@ -27,17 +27,15 @@ LOCAL_C_INCLUDES += \
     $(LOCAL_PATH)/packages/xdais/ \
     $(LOCAL_PATH)/packages/xdctools/ \
     $(LOCAL_PATH)/ \
-    hardware/ti/omap4xxx/omx/osal/inc \
-    hardware/ti/ipc/packages/ti/ipc/mm
+    hardware/ti/ipc/packages/ \
 
 LOCAL_SHARED_LIBRARIES := \
     libmmrpc \
     libc \
     libcutils \
     liblog \
-    libosal
 
-LOCAL_CFLAGS += -Dxdc_target_types__=google/targets/arm/std.h -DBUILDOS_ANDROID -DDCE_DEBUG_ENABLE=1 -DDCE_DEBUG_LEVEL=1
+LOCAL_CFLAGS += -DBUILDOS_ANDROID -DDCE_DEBUG_ENABLE=1 -DDCE_DEBUG_LEVEL=1
 
 LOCAL_MODULE_TAGS:= optional
 
