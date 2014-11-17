@@ -83,6 +83,7 @@ typedef enum MemoryRegion {
     MEM_TILER16_2D,
     MEM_CARVEOUT,
     MEM_SHARED,
+    MEM_GRALLOC,
     MEM_MAX
 } MemRegion;
 
@@ -99,12 +100,34 @@ typedef enum mem_error_status {
     MEM_EINVALID_INPUT = -1,
     MEM_EOUT_OF_TILER_MEMORY = -2,
     MEM_EOUT_OF_SHMEMORY = -3,
-    MEM_EOUT_OF_SYSTEM_MEMORY = -4
+    MEM_EOUT_OF_SYSTEM_MEMORY = -4,
+    MEM_EOPEN_FAILURE = -5,
 } mem_error_status;
 
 void *memplugin_alloc(int sz, int height, MemRegion region, int align, int flags);
 void memplugin_free(void *ptr);
 int32_t memplugin_share(void *ptr);
+
+#ifdef BUILDOS_ANDROID
+typedef enum BufAccessMode {
+    MemAccess_8Bit,
+    MemAccess_16Bit,
+    MemAccess_32Bit
+}BufAccessMode;
+
+typedef struct Mem_2DParams {
+    uint32_t nHeight;
+    uint32_t nWidth;
+    uint32_t nStride;
+    BufAccessMode eAccessMode;
+}Mem_2DParams;
+
+void *memplugin_alloc_noheader(MemHeader *memHdr, int sz, int height, MemRegion region, int align, int flags);
+void memplugin_free_noheader(MemHeader *memHdr);
+
+int memplugin_open();
+int memplugin_close();
+#endif
 
 #endif /* __MEMPLUGIN_H__ */
 

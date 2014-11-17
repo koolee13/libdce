@@ -1,18 +1,3 @@
-#
-# Copyright (C) 2010 The Android Open Source Project
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#      http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-#
 LOCAL_PATH:= $(call my-dir)
 
 #
@@ -28,18 +13,23 @@ LOCAL_C_INCLUDES += \
     $(LOCAL_PATH)/packages/xdctools/ \
     $(LOCAL_PATH)/ \
     hardware/ti/ipc/packages/ \
+    external/libdrm/include/drm \
+    external/libdrm/omap \
+    external/libdrm
 
 LOCAL_SHARED_LIBRARIES := \
     libmmrpc \
     libc \
     libcutils \
     liblog \
+    libdrm \
+    libdrm_omap
 
 LOCAL_CFLAGS += -DBUILDOS_ANDROID -DDCE_DEBUG_ENABLE=1 -DDCE_DEBUG_LEVEL=1
 
 LOCAL_MODULE_TAGS:= optional
 
-LOCAL_SRC_FILES:= libdce.c
+LOCAL_SRC_FILES:= libdce.c libdce_android.c memplugin_android.c
 
 
 LOCAL_MODULE:= libdce
