@@ -103,6 +103,9 @@ int memplugin_close()
 void *memplugin_alloc(int sz, int height, MemRegion region, int align, int flags)
 {
     MemHeader        *h = NULL;
+
+    drmSetMaster(OmapDrm_FD);
+
     struct omap_bo   *bo = omap_bo_new(OmapDev, sz + sizeof(MemHeader), OMAP_BO_WC);
 
     if( !bo ) {
@@ -120,6 +123,8 @@ void *memplugin_alloc(int sz, int height, MemRegion region, int align, int flags
     h->handle = (void*)bo;
     h->offset = 0;
 
+    drmDropMaster(OmapDrm_FD);
+
     dce_buf_lock(1, (size_t *)&(h->dma_buf_fd));
 
     return (H2P(h));
@@ -135,8 +140,10 @@ void memplugin_free(void *ptr)
             /* close the file descriptor */
             close(h->dma_buf_fd);
         }
+    drmSetMaster(OmapDrm_FD);
         /*Finally, Delete the buffer object*/
         omap_bo_del((struct omap_bo *)h->handle);
+    drmDropMaster(OmapDrm_FD);
         ptr = NULL;
     }
 
@@ -159,6 +166,8 @@ void *memplugin_alloc_noheader(MemHeader *memHdr, int sz, int height, MemRegion 
     if (!memHdr)
         return NULL;
 
+    drmSetMaster(OmapDrm_FD);
+
     struct omap_bo   *bo = omap_bo_new(OmapDev, sz, OMAP_BO_WC);
 
     if( !bo ) {
@@ -176,6 +185,7 @@ void *memplugin_alloc_noheader(MemHeader *memHdr, int sz, int height, MemRegion 
     h->region = region;
     h->flags = flags;/*Beware: This is a bit field.*/
     h->offset = 0;
+    drmDropMaster(OmapDrm_FD);
 
     dce_buf_lock(1, (size_t *)&(h->dma_buf_fd));
 
@@ -195,8 +205,10 @@ void memplugin_free_noheader(MemHeader *memHdr)
         close(h->dma_buf_fd);
     }
 
+    drmSetMaster(OmapDrm_FD);
     /*Finally, Delete the buffer object*/
     omap_bo_del((struct omap_bo *)h->ptr);
+    drmDropMaster(OmapDrm_FD);
 
     return;
 }
