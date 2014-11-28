@@ -38,7 +38,7 @@
 #include <omap_drm.h>
 #include <omap_drmif.h>
 
-#include <MmRpc.h>
+#include <ti/ipc/mm/MmRpc.h>
 #include "dce_priv.h"
 #include "libdce.h"
 #include "dce_rpc.h"

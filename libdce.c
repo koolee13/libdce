@@ -654,7 +654,8 @@ static XDAS_Int32 process(void *codec, void *inBufs, void *outBufs,
                                     MmRpc_OFFSET((int32_t)inBufs, (int32_t)data_buf),
                                     (size_t)*data_buf, (size_t)*data_buf);
 #ifdef BUILDOS_LINUX
-        if(count == CHROMA_BUF && codec_id == OMAP_DCE_VIDENC2 ){
+        /*Single planar input buffer for Encoder. No adjustments needed for Multiplanar case*/
+        if(count == CHROMA_BUF && codec_id == OMAP_DCE_VIDENC2 && ((IVIDEO2_BufDesc *)inBufs)->planeDesc[LUMA_BUF].buf == ((IVIDEO2_BufDesc *)inBufs)->planeDesc[CHROMA_BUF].buf){
             if(((IVIDEO2_BufDesc *)inBufs)->planeDesc[count].memType == XDM_MEMTYPE_RAW ||
                ((IVIDEO2_BufDesc *)inBufs)->planeDesc[count].memType == XDM_MEMTYPE_TILEDPAGE )
                 *data_buf += ((IVIDEO2_BufDesc *)inBufs)->planeDesc[LUMA_BUF].bufSize.bytes;
