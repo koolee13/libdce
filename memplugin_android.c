@@ -58,7 +58,7 @@ int memplugin_open()
 
     /* Open omapdrm device */
     if( OmapDrm_FD == INVALID_DRM_FD ) {
-        OmapDrm_FD = drmOpen("omapdrm", "platform:omapdrm:00");
+	OmapDrm_FD = open("/dev/dri/renderD128", O_RDWR, 0);
         if(OmapDrm_FD <= 0) {
             ALOGE("omapdrm open failed\n");
             return MEM_EOPEN_FAILURE;
