@@ -34,7 +34,7 @@
 #include <sys/ioctl.h>
 #include <sys/mman.h>
 #include <sys/eventfd.h>
-#include <fcntl.h>
+#include <pthread.h>
 
 #include "memplugin.h"
 #include "libdce.h"
@@ -50,6 +50,7 @@
 
 int                    OmapDrm_FD  = INVALID_DRM_FD;
 struct omap_device    *OmapDev     = NULL;
+extern pthread_mutex_t    ipc_mutex;
 
 int memplugin_open()
 {
@@ -69,6 +70,10 @@ int memplugin_open()
         close(OmapDrm_FD);
         return MEM_EOPEN_FAILURE;
     }
+
+    pthread_mutexattr_t attr;
+    pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE);
+    pthread_mutex_init(&ipc_mutex, &attr);
 
     if (dce_ipc_init(IPU) != MEM_EOK) {
         omap_device_del(OmapDev);

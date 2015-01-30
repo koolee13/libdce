@@ -50,7 +50,7 @@
 /* Handle used for Remote Communication              */
 MmRpc_Handle    MmRpcHandle[MAX_REMOTEDEVICES] = { NULL};
 Engine_Handle   gEngineHandle[MAX_INSTANCES][MAX_REMOTEDEVICES] = { {NULL, NULL}};
-static pthread_mutex_t    ipc_mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t    ipc_mutex = PTHREAD_MUTEX_INITIALIZER;
 static int      __ClientCount[MAX_REMOTEDEVICES] = {0};
 int             dce_debug = DCE_DEBUG_LEVEL;
 const String DCE_DEVICE_NAME[MAX_REMOTEDEVICES]= {"rpmsg-dce","rpmsg-dce-dsp"};

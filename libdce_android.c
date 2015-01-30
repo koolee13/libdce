@@ -33,6 +33,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <pthread.h>
 
 #include <ti/ipc/mm/MmRpc.h>
 #include "dce_priv.h"
@@ -42,12 +43,15 @@
 
 
 extern MmRpc_Handle    MmRpcHandle[];
+extern pthread_mutex_t    ipc_mutex;
 
 int dce_buf_lock(int num, size_t *handle)
 {
     int                 i;
     MmRpc_BufDesc      *desc = NULL;
     dce_error_status    eError = DCE_EOK;
+
+    pthread_mutex_lock(&ipc_mutex);
 
     _ASSERT(num > 0, DCE_EINVALID_INPUT);
 
@@ -65,6 +69,8 @@ EXIT:
     if( desc ) {
         free(desc);
     }
+    pthread_mutex_unlock(&ipc_mutex);
+
     return (eError);
 }
 
@@ -73,6 +79,8 @@ int dce_buf_unlock(int num, size_t *handle)
     int                 i;
     MmRpc_BufDesc      *desc = NULL;
     dce_error_status    eError = DCE_EOK;
+
+    pthread_mutex_lock(&ipc_mutex);
 
     _ASSERT(num > 0, DCE_EINVALID_INPUT);
 
@@ -90,6 +98,9 @@ EXIT:
     if( desc ) {
         free(desc);
     }
+
+    pthread_mutex_unlock(&ipc_mutex);
+
     return (eError);
 }
 
