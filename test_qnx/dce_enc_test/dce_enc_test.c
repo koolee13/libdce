@@ -52,9 +52,6 @@
 
 #include "ti/shmemallocator/SharedMemoryAllocatorUsr.h"
 
-
-#define OMAP5
-
 #define PRINT_DEBUG
 //#define H264_DEBUG
 
@@ -1139,7 +1136,7 @@ int main(int argc, char * *argv)
             mpeg4enc_status = (IMPEG4ENC_Status *) status;
             DEBUG("dce_alloc IMPEG4ENC_Status successful mpeg4enc_status=%p", mpeg4enc_status);
             err = VIDENC2_control(codec, XDM_SETPARAMS, (VIDENC2_DynamicParams *) mpeg4enc_dynParams, (VIDENC2_Status *) mpeg4enc_status);
-            ERROR("Codec_control returned err=%d, extendedError=%08x", err, mpeg4enc_status->videnc2Status.extendedError);
+            DEBUG("Codec_control returned err=%d, extendedError=%08x", err, mpeg4enc_status->videnc2Status.extendedError);
             break;
         default :
             ERROR("Unrecognized codec to encode");
