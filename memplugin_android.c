@@ -201,7 +201,7 @@ void memplugin_free_noheader(MemHeader *memHdr)
     }
 
     /*Finally, Delete the buffer object*/
-    omap_bo_del((struct omap_bo *)h->ptr);
+    omap_bo_del((struct omap_bo *)h->handle);
 
     return;
 }
