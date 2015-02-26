@@ -1357,7 +1357,7 @@ int main(int argc, char * *argv)
 #ifdef PROFILE_TIME
             INFO("processed returned in: %llu us", (uint64_t) mark_microsecond(&codec_process_time));
 #endif
-            if( err ) {
+            if( err == DCE_EXDM_FAIL ) {
                 if( XDM_ISFATALERROR(outArgs->extendedError)) {
                     ERROR("process returned error: %d\n", err);
                     ERROR("extendedError: %08x", outArgs->extendedError);
@@ -1392,7 +1392,12 @@ int main(int argc, char * *argv)
                     DEBUG("Non-fatal err=%d, extendedError=%08x", err, outArgs->extendedError);
                     err = XDM_EOK;
                 }
-            }
+            }else if(( err == DCE_EXDM_UNSUPPORTED ) ||
+                     ( err == DCE_EIPC_CALL_FAIL ) ||
+                     ( err == DCE_EINVALID_INPUT )) {
+                         ERROR("DCE_TEST_FAIL: VIDDEC3_process return err %d", err);
+                         goto shutdown;
+                  }
 
             /*
              * Handling of output data from codec
