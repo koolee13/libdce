@@ -67,6 +67,7 @@ extern int dce_debug;
 
 #elif defined BUILDOS_ANDROID
 #include <utils/Log.h>
+#define LOG_TAG "libdce"
 #define TRACE(lvl,FMT, ...)  do if ((lvl) <= dce_debug) { \
         ALOGE("%s:%d:\t%s\t Error: "FMT,__FILE__, __LINE__,__FUNCTION__ ,##__VA_ARGS__); \
 }while( 0 )
