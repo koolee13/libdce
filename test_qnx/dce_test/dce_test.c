@@ -988,9 +988,10 @@ int main(int argc, char * *argv)
  */
 
 #ifdef GETVERSION
-    // Allocating TILER 1D to store the Codec version information from Codec.
+    // Allocating memory to store the Codec version information from Codec.
     char *codec_version = NULL;
-    codec_version = tiler_alloc(VERSION_SIZE, 0);
+    codec_version = dce_alloc(VERSION_SIZE);
+    DEBUG("codec_version 0x%x", codec_version);
 #endif
 
     switch( codec_switch ) {
@@ -1131,7 +1132,7 @@ int main(int argc, char * *argv)
 
 #ifdef GETVERSION
     if( codec_version ) {
-        MemMgr_Free(codec_version);
+        dce_free(codec_version);
     }
 #endif
 
@@ -1145,7 +1146,7 @@ int main(int argc, char * *argv)
     DEBUG("input buffer configuration width %d height %d", width, height);
     inBufs = dce_alloc(sizeof(XDM2_BufDesc));
     inBufs->numBufs = 1;
-    input = tiler_alloc(width * height, 0);
+    input = dce_alloc(width * height);
     inBufs->descs[0].buf = (XDAS_Int8 *)input;
     inBufs->descs[0].memType = XDM_MEMTYPE_RAW;
 
@@ -1485,7 +1486,7 @@ out:
         dce_free(outArgs);
     }
     if( input ) {
-        MemMgr_Free(input);
+        dce_free(input);
     }
 
     output_free();

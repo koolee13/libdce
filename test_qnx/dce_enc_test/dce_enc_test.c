@@ -264,9 +264,10 @@ int read_input(const char *pattern, int cnt, char *input)
 
     sz = width * height * 3 / 2;
 
-    // Filling the input in TILER 2D mode; where
-    // Luma has size of Stride "4096" * height.
-    // and Chroma has size of Stride "4096 * height / 2.
+    // Filling the input in NV12 format; where
+    // Luma has size of Stride "4096" * height for TILER or width * height
+    // and Chroma has size of Stride "4096 * height / 2 for TILER or
+    // width * height / 2
     for( num_planes = 0; num_planes < 2; num_planes++ ) {
         if( num_planes ) { //UV location
             buf_height = height / 2;
@@ -519,7 +520,7 @@ int main(int argc, char * *argv)
 
     DEBUG("width=%d, height=%d", width, height);
 
-    /* output buffer parameters is TILER with width and height */
+    /* output buffer parameters is aligned */
     width  = ALIGN2(width, 4);         /* round up to MB */
     height = ALIGN2(height, 1);        /* round up to MB */
 
@@ -607,7 +608,6 @@ int main(int argc, char * *argv)
             DEBUG("INPUT TILER buf=%p, buf->buf=%p y=%08x, uv=%08x", buf, buf->buf, buf->y, buf->uv);
         } else {
             ERROR("DCE_ENCODE_TEST_FAIL: TILER ALLOCATION FAILED");
-            free(buf);
             goto shutdown;
         }
     } else {
@@ -987,9 +987,9 @@ int main(int argc, char * *argv)
     dynParams->lateAcquireArg = -1;
 
 #ifdef GETVERSION
-    // Allocating TILER 1D to store the Codec version information from Codec.
+    // Allocating memory to store the Codec version information from Codec.
     char *codec_version = NULL;
-    codec_version = tiler_alloc(VERSION_SIZE, 0);
+    codec_version = dce_alloc(VERSION_SIZE);
 #endif
 
     switch( codec_switch ) {
@@ -1151,7 +1151,7 @@ int main(int argc, char * *argv)
 
 #ifdef GETVERSION
     if( codec_version ) {
-        MemMgr_Free(codec_version);
+        dce_free(codec_version);
     }
 #endif
 

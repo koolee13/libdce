@@ -153,7 +153,7 @@ void *dce_alloc(int sz)
       Beware: The last argument is a bit field. As of now only core ID
       is considered to be there in the last 4 bits of the word
     */
-    return (memplugin_alloc(sz, 1, MEM_TILER_1D, 0, IPU));
+    return (memplugin_alloc(sz, 1, DEFAULT_REGION, 0, IPU));
 }
 
 void dce_free(void *ptr)

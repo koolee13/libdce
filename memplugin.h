@@ -49,7 +49,7 @@
 #include <tilermem.h>
 #include <SharedMemoryAllocatorUsr.h>
 #include <memmgr.h>
-#define DEFAULT_REGION MEM_TILER_1D
+#define DEFAULT_REGION MEM_SHARED
 
 #elif defined (BUILDOS_ANDROID)
 #define DEFAULT_REGION MEM_CARVEOUT
