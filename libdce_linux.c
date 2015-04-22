@@ -34,6 +34,8 @@
 #include <string.h>
 #include <stdio.h>
 
+#include <pthread.h>
+
 #include <xf86drm.h>
 #include <omap_drm.h>
 #include <omap_drmif.h>
@@ -51,11 +53,18 @@ int                    bDrmOpenedByDce = FALSE;
 struct omap_device    *OmapDev     = NULL;
 extern MmRpc_Handle    MmRpcHandle[];
 
+extern pthread_mutex_t    ipc_mutex;
+
 void *dce_init(void)
 {
     dce_error_status    eError = DCE_EOK;
 
     DEBUG(" >> dce_init");
+
+    pthread_mutexattr_t attr;
+    pthread_mutexattr_init(&attr);
+    pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE);
+    pthread_mutex_init(&ipc_mutex, &attr);
 
     /* Open omapdrm device */
     if( OmapDrm_FD == INVALID_DRM_FD ) {
@@ -90,6 +99,8 @@ int dce_buf_lock(int num, size_t *handle)
     MmRpc_BufDesc      *desc = NULL;
     dce_error_status    eError = DCE_EOK;
 
+    pthread_mutex_lock(&ipc_mutex);
+
     _ASSERT(num > 0, DCE_EINVALID_INPUT);
 
     desc = malloc(num * sizeof(MmRpc_BufDesc));
@@ -106,6 +117,9 @@ EXIT:
     if( desc ) {
         free(desc);
     }
+
+    pthread_mutex_unlock(&ipc_mutex);
+
     return (eError);
 }
 
@@ -114,6 +128,8 @@ int dce_buf_unlock(int num, size_t *handle)
     int                 i;
     MmRpc_BufDesc      *desc = NULL;
     dce_error_status    eError = DCE_EOK;
+
+    pthread_mutex_lock(&ipc_mutex);
 
     _ASSERT(num > 0, DCE_EINVALID_INPUT);
 
@@ -131,6 +147,9 @@ EXIT:
     if( desc ) {
         free(desc);
     }
+
+    pthread_mutex_unlock(&ipc_mutex);
+
     return (eError);
 }
 
@@ -156,6 +175,8 @@ int dsp_dce_buf_lock(int num, size_t *handle)
     MmRpc_BufDesc      *desc = NULL;
     dce_error_status    eError = DCE_EOK;
 
+    pthread_mutex_lock(&ipc_mutex);
+
     _ASSERT(num > 0, DCE_EINVALID_INPUT);
 
     desc = malloc(num * sizeof(MmRpc_BufDesc));
@@ -172,6 +193,9 @@ EXIT:
     if( desc ) {
         free(desc);
     }
+
+    pthread_mutex_unlock(&ipc_mutex);
+
     return (eError);
 }
 
@@ -180,6 +204,8 @@ int dsp_dce_buf_unlock(int num, size_t *handle)
     int                 i;
     MmRpc_BufDesc      *desc = NULL;
     dce_error_status    eError = DCE_EOK;
+
+    pthread_mutex_lock(&ipc_mutex);
 
     _ASSERT(num > 0, DCE_EINVALID_INPUT);
 
@@ -197,6 +223,8 @@ EXIT:
     if( desc ) {
         free(desc);
     }
+
+    pthread_mutex_unlock(&ipc_mutex);
     return (eError);
 }
 /* Incase of X11 or Wayland the fd can be shared to libdce using this call */
