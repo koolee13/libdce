@@ -1388,7 +1388,7 @@ int main(int argc, char * *argv)
                 err = VIDENC2_process(codec, inBufs, outBufs, (VIDENC2_InArgs *) h264enc_inArgs, (VIDENC2_OutArgs *) h264enc_outArgs);
                 DEBUG("[DCE_ENC_TEST] VIDENC2_process - err %d", err);
 
-                if( err < 0 ) {
+                if( err == DCE_EXDM_FAIL ) {
                     int    i = 0;
 
                     for( i=0; i < IH264ENC_EXTERROR_NUM_MAXWORDS; i++ ) {
@@ -1404,23 +1404,21 @@ int main(int argc, char * *argv)
 
                     if( XDM_ISFATALERROR(h264enc_outArgs->videnc2OutArgs.extendedError) ) {
                         ERROR("process returned error: %d\n", err);
-                        //ERROR("extendedError: %08x", outArgs->extendedError);
                         ERROR("extendedError: %08x", h264enc_outArgs->videnc2OutArgs.extendedError);
                         ERROR("DCE_ENCODE_TEST_FAIL: CODEC FATAL ERROR");
                         goto shutdown;
                     } else if( eof ) {
-                        //ERROR("Codec_process returned err=%d, extendedError=%08x", err, outArgs->extendedError);
                         ERROR("Codec_process returned err=%d, extendedError=%08x", err, h264enc_outArgs->videnc2OutArgs.extendedError);
-                        err = XDM_EFAIL;
-
-                        if( err == XDM_EFAIL ) {
-                            DEBUG("-------------------- Flush completed------------------------");
-                        }
+                        DEBUG("-------------------- Flush completed------------------------");
                     } else {
-                        //DEBUG("Non-fatal err=%d, extendedError=%08x", err, outArgs->extendedError);
                         DEBUG("Non-fatal err=%d, h264enc_outArgs->videnc2OutArgs.extendedError=%08x ", err, h264enc_outArgs->videnc2OutArgs.extendedError);
                         err = XDM_EOK;
                     }
+                } else if(( err == DCE_EXDM_UNSUPPORTED ) ||
+                          ( err == DCE_EIPC_CALL_FAIL ) ||
+                          ( err == DCE_EINVALID_INPUT )) {
+                              ERROR("DCE_ENCODE_TEST_FAIL: VIDENC2_process return err %d", err);
+                              goto shutdown;
                 }
 
                 DEBUG("bytesGenerated %d", h264enc_outArgs->videnc2OutArgs.bytesGenerated);
@@ -1429,11 +1427,27 @@ int main(int argc, char * *argv)
                 DEBUG("[DCE_ENC_TEST] codec %p inBufs %p outBufs %p mpeg4enc_inArgs %p mpeg4enc_outArgs %p", codec, inBufs, outBufs, mpeg4enc_inArgs, mpeg4enc_outArgs);
                 err = VIDENC2_process(codec, inBufs, outBufs, (VIDENC2_InArgs *) mpeg4enc_inArgs, (VIDENC2_OutArgs *) mpeg4enc_outArgs);
                 DEBUG("[DCE_ENC_TEST] VIDENC2_process - err %d", err);
-                if( err < 0 ) {
-                    //TODO error handling on MPEG4/H.263
+                if( err == DCE_EXDM_FAIL ) {
                     ERROR("DCE_ENCODE_TEST_FAIL: CODEC PROCESS RETURNED ERROR : err=%d, extendedError=%08x", err, mpeg4enc_outArgs->videnc2OutArgs.extendedError);
-                    goto shutdown;
+                    if( XDM_ISFATALERROR(mpeg4enc_outArgs->videnc2OutArgs.extendedError) ) {
+                        ERROR("process returned error: %d\n", err);
+                        ERROR("extendedError: %08x", mpeg4enc_outArgs->videnc2OutArgs.extendedError);
+                        ERROR("DCE_ENCODE_TEST_FAIL: CODEC FATAL ERROR");
+                        goto shutdown;
+                    } else if( eof ) {
+                        ERROR("Codec_process returned err=%d, extendedError=%08x", err, mpeg4enc_outArgs->videnc2OutArgs.extendedError);
+                        DEBUG("-------------------- Flush completed------------------------");
+                    } else {
+                        DEBUG("Non-fatal err=%d, mpeg4enc_outArgs->videnc2OutArgs.extendedError=%08x ", err, mpeg4enc_outArgs->videnc2OutArgs.extendedError);
+                        err = XDM_EOK;
+                    }
+                } else if(( err == DCE_EXDM_UNSUPPORTED ) ||
+                          ( err == DCE_EIPC_CALL_FAIL ) ||
+                          ( err == DCE_EINVALID_INPUT )) {
+                              ERROR("DCE_ENCODE_TEST_FAIL: VIDENC2_process return err %d", err);
+                              goto shutdown;
                 }
+
                 DEBUG("\n bytesGenerated %d", mpeg4enc_outArgs->videnc2OutArgs.bytesGenerated);
                 bytesGenerated = mpeg4enc_outArgs->videnc2OutArgs.bytesGenerated;
             }
