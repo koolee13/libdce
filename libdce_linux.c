@@ -33,7 +33,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
-
 #include <pthread.h>
 
 #include <xf86drm.h>
@@ -48,31 +47,33 @@
 
 #define INVALID_DRM_FD (-1)
 
-int                    OmapDrm_FD  = INVALID_DRM_FD;
-int                    bDrmOpenedByDce = FALSE;
+static int             OmapDrm_FD  = INVALID_DRM_FD;
+static int             dce_init_count = 0;
 struct omap_device    *OmapDev     = NULL;
 extern MmRpc_Handle    MmRpcHandle[];
-
 extern pthread_mutex_t    ipc_mutex;
 
 void *dce_init(void)
 {
     dce_error_status    eError = DCE_EOK;
+    pthread_mutexattr_t attr;
 
     DEBUG(" >> dce_init");
 
-    pthread_mutexattr_t attr;
-    pthread_mutexattr_init(&attr);
-    pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE);
-    pthread_mutex_init(&ipc_mutex, &attr);
+    /* Use this for refcount */
+    dce_init_count++;
 
-    /* Open omapdrm device */
-    if( OmapDrm_FD == INVALID_DRM_FD ) {
-        DEBUG("Open omapdrm device");
+   /* Open omapdrm device only for the first dce_init call */
+    if( dce_init_count == 1 ) {
+        DEBUG("Open omapdrm device and initializing the mutex...");
         OmapDrm_FD = drmOpen("omapdrm", "platform:omapdrm:00");
         _ASSERT(OmapDrm_FD > 0, DCE_EOMAPDRM_FAIL);
-        bDrmOpenedByDce = TRUE;
+
+        pthread_mutexattr_init(&attr);
+        pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE);
+        pthread_mutex_init(&ipc_mutex, &attr);
     }
+
     OmapDev = omap_device_new(OmapDrm_FD);
     _ASSERT(OmapDev != NULL, DCE_EOMAPDRM_FAIL);
 
@@ -84,12 +85,11 @@ void dce_deinit(void *dev)
 {
     omap_device_del(dev);
     dev = NULL;
-    if (bDrmOpenedByDce == TRUE) {
+    if (--dce_init_count == 0) {
+        DEBUG("Closing omapdrm device...");
         close(OmapDrm_FD);
-        bDrmOpenedByDce = FALSE;
+        OmapDrm_FD = INVALID_DRM_FD;
     }
-    OmapDrm_FD = INVALID_DRM_FD;
-
     return;
 }
 
