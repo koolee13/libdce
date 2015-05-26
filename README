@@ -417,10 +417,10 @@ XDAIS version: xdais_7_24_00_04
 FC version: framework_components_3_31_00_02
 
 IVAHD_Codecs:
-H.264 Enc  : 02.00.08.01
+H.264 Enc  : 02.00.09.01
 MPEG-4 Enc : 01.00.02.01
 H.264 Dec  : 02.00.17.01
 MPEG-4 Dec : 01.00.15.01
 MPEG-2 Dec : 01.00.14.01
 VC-1 Dec   : 01.00.02.00
-MJPEG Dec  : 01.00.12.01
+MJPEG Dec  : 01.00.13.01
