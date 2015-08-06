@@ -900,6 +900,7 @@ int main(int argc, char * *argv)
         case DCE_TEST_VC1SMP :
         case DCE_TEST_VC1AP :
             vc1_params = (IVC1VDEC_Params *) params;
+            vc1_params->errorConcealmentON = TRUE;
 
             DEBUG("dce_alloc VIDDEC3_Params successful vc1_params=%p", vc1_params);
 
