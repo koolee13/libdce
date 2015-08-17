@@ -414,7 +414,7 @@ Tools:
 XDC version  : xdctools_3_30_06_67_core
 CE version   : codec_engine_3_24_00_08
 XDAIS version: xdais_7_24_00_04
-FC version: framework_components_3_31_00_02
+FC version: framework_components_3_40_01_04
 
 IVAHD_Codecs:
 H.264 Enc  : 02.00.09.01
