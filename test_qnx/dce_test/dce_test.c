@@ -725,6 +725,10 @@ int main(int argc, char * *argv)
 
     DEBUG("Num Frames is %d width=%d, height=%d", frameCount, width, height);
 
+    /* calculate output buffer parameters: */
+    width  = ALIGN2(width, 4);         /* round up to MB */
+    height = ALIGN2(height, 4);        /* round up to MB */
+
     switch( codec_switch ) {
         case DCE_TEST_H264 :
             padded_width  = ALIGN2(width + (2 * PADX_H264), 7);
@@ -788,7 +792,7 @@ int main(int argc, char * *argv)
             params->maxBitRate      = 10000000;
             params->displayDelay    = IVIDDEC3_DISPLAY_DELAY_AUTO;
             params->numOutputDataUnits  = 0;
-            params->maxWidth            = ALIGN2(width, 4);
+            params->maxWidth            = width;
             break;
         case DCE_TEST_MPEG4 :
             params = dce_alloc(sizeof(IMPEG4VDEC_Params));
@@ -800,7 +804,7 @@ int main(int argc, char * *argv)
             params->maxBitRate      = 10000000;
             params->displayDelay    = IVIDDEC3_DISPLAY_DELAY_1;
             params->numOutputDataUnits  = 0;
-            params->maxWidth            = ALIGN2(width, 4);
+            params->maxWidth            = width;
             break;
         case DCE_TEST_VC1SMP :
         case DCE_TEST_VC1AP :
@@ -813,7 +817,7 @@ int main(int argc, char * *argv)
             params->maxBitRate      = 45000000;
             params->displayDelay    = IVIDDEC3_DISPLAY_DELAY_1;
             params->numOutputDataUnits  = 0;
-            params->maxWidth            = ALIGN2(width, 4);
+            params->maxWidth            = width;
             break;
         case DCE_TEST_MJPEG :
             params = dce_alloc(sizeof(IJPEGVDEC_Params));
@@ -825,7 +829,7 @@ int main(int argc, char * *argv)
             params->maxBitRate      = 10000000;
             params->displayDelay    = IVIDDEC3_DISPLAY_DELAY_1;
             params->numOutputDataUnits  = 1;
-            params->maxWidth            = ALIGN2(width, 4);
+            params->maxWidth            = width;
             break;
 
         case DCE_TEST_MPEG2 :
@@ -843,7 +847,7 @@ int main(int argc, char * *argv)
 
     }
 
-    params->maxHeight           = ALIGN2(height, 4);
+    params->maxHeight           = height;
     params->maxFrameRate        = 30000;
     params->dataEndianness      = XDM_BYTE;
     params->forceChromaFormat   = XDM_YUV_420SP;
