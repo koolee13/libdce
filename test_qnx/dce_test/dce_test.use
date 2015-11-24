@@ -12,27 +12,28 @@ Options:
 
 Examples:
 1. decoding h.264
-   dce_test width height frames_to_write framesize inpattern outpattern codec tiler/nontiler
-   dce_test 320 240 30 framesize.txt inputfile.h264 outputfile.yuv h264 tiler
+   dce_test width height frames_to_write framesize inpattern outpattern codec tiler/nontiler numrow/slice/fixed/full
+   dce_test 320 240 30 framesize.txt inputfile.h264 outputfile.yuv h264 tiler full
+   dce_test 320 240 30 framesize.txt inputfile.h264 low_numrow.yuv h264 tiler numrow
 
 2. decoding mpeg4
-   dce_test width height frames_to_write framesize inpattern outpattern codec tiler/nontiler
-   dce_test 640 480 30 framesize.txt inputfile.m4v outputfile.yuv mpeg4 nontiler
+   dce_test width height frames_to_write framesize inpattern outpattern codec tiler/nontiler full
+   dce_test 640 480 30 framesize.txt inputfile.m4v outputfile.yuv mpeg4 nontiler full
 
 3. decoding vc1ap
-   dce_test width height frames_to_write framesize inpattern outpattern codec tiler/nontiler
-   dce_test 720 480 30 framesize.txt inputfile.vc1 outputfile.yuv vc1ap tiler
+   dce_test width height frames_to_write framesize inpattern outpattern codec tiler/nontiler full
+   dce_test 720 480 30 framesize.txt inputfile.vc1 outputfile.yuv vc1ap tiler full
 
 4. decoding vc1smp
-   dce_test width height frames_to_write framesize inpattern outpattern codec tiler/nontiler
-   dce_test 320 240 30 framesize.txt inputfile.vc1 outputfile.yuv vc1smp nontiler
+   dce_test width height frames_to_write framesize inpattern outpattern codec tiler/nontiler full
+   dce_test 320 240 30 framesize.txt inputfile.vc1 outputfile.yuv vc1smp nontiler full
 
 5. decoding mjpeg
-   dce_test width height frames_to_write framesize inpattern outpattern codec tiler/nontiler
-   dce_test 1280 720 30 framesize.txt inputfile.bin outputfile.yuv mjpeg tiler
+   dce_test width height frames_to_write framesize inpattern outpattern codec tiler/nontiler full
+   dce_test 1280 720 30 framesize.txt inputfile.bin outputfile.yuv mjpeg tiler full
 
 6. decoding mpeg2
-   dce_test width height frames_to_write framesize inpattern outpattern codec tiler/nontiler
-   dce_test 1920 1088 30 framesize.txt inputfile.bin outputfile.yuv mpeg2 nontiler
+   dce_test width height frames_to_write framesize inpattern outpattern codec tiler/nontiler full
+   dce_test 1920 1088 30 framesize.txt inputfile.bin outputfile.yuv mpeg2 nontiler full
 
 Currently supported codecs: h264, mpeg4, vc1ap, vc1smp, mjpeg, mpeg2

@@ -53,7 +53,12 @@
 #include "ti/shmemallocator/SharedMemoryAllocatorUsr.h"
 
 #define PRINT_DEBUG
+//#define PRINT_DEBUG_LOW
+
 //#define H264_DEBUG
+//#define DUMPINPUTDATA
+//#define DUMPOUTPUTDATA
+//#define ROWMODE_INPUTDUMP
 
 #define ERROR(FMT, ...)  printf("%s:%d:\t%s\terror: " FMT "\n", __FILE__, __LINE__, __FUNCTION__, ##__VA_ARGS__)
 // enable below to print debug information
@@ -62,6 +67,13 @@
 #else
 #define DEBUG(FMT, ...)
 #endif
+
+#ifdef PRINT_DEBUG_LOW
+#define DEBUGLOW(FMT, ...)  printf("%s:%d:\t%s\tdebug: " FMT "\n", __FILE__, __LINE__, __FUNCTION__, ##__VA_ARGS__)
+#else
+#define DEBUGLOW(FMT, ...)
+#endif
+
 #define INFO(FMT, ...)  printf("%s:%d:\t%s\tinfo: " FMT "\n", __FILE__, __LINE__, __FUNCTION__, ##__VA_ARGS__)
 #define MIN(a, b)        (((a) < (b)) ? (a) : (b))
 
@@ -73,6 +85,26 @@
 
 // Getting codec version through XDM_GETVERSION
 #define GETVERSION
+
+#ifdef GETVERSION
+#define VERSION_SIZE 128
+#endif
+
+/* ************************************************************************* */
+/* utilities to allocate/manage 2d input buffers */
+
+typedef struct InputBuffer InputBuffer;
+
+struct InputBuffer {
+    char        *buf; /* virtual address for local access, 4kb stride */
+    SSPtr        y, uv; /* physical addresses of Y and UV for remote access */
+    InputBuffer *next;      /* next free buffer */
+    bool         tiler;
+    uint32_t     len;
+    shm_buf      shmBuf;
+};
+
+static InputBuffer *head = NULL;
 
 enum {
     IVAHD_H264_ENCODE,
@@ -114,7 +146,29 @@ IMPEG4ENC_DynamicParams   *mpeg4enc_dynParams = NULL;
 IMPEG4ENC_Status          *mpeg4enc_status    = NULL;
 
 unsigned int    frameSize[64000]; /* Buffer for keeping frame sizes */
+int             endOfFile = 0;
+char           *in_pattern, *out_pattern;
+int            in_cnt = 0, out_cnt = 0;
+InputBuffer    *buf = NULL;
 static int      input_offset = 0;
+
+#ifdef ROWMODE_INPUTDUMP
+FILE          *inputDump;
+char          Buff1[100];
+static int    GlobalCount1 = 0;
+static int read_input_count = 0;
+#endif
+
+#ifdef DUMPOUTPUTDATA
+FILE   *outputDump;
+#endif
+
+// This global only used in low latency IVIDEO_NUMROWS
+static int numBlock = 10;
+static int input_y_offset = 0;
+static int input_uv_offset = 0;
+static int dest_y_offset = 0;
+static int dest_uv_offset = 0;
 
 static void *tiler_alloc(int width, int height)
 {
@@ -196,18 +250,136 @@ static void free_nonTiler(void *shmBuf)
     SHM_release(shmBuf);
 }
 
-/* ************************************************************************* */
-/* utilities to allocate/manage 2d input buffers */
+void input_free(void)
+{
+    InputBuffer   *buf = head;
 
-typedef struct InputBuffer InputBuffer;
+    while((buf=head)) {
+        DEBUG("input_free: %p", buf);
+        if( buf->tiler ) {
+            MemMgr_Free(buf->buf);
+        } else {
+            SHM_release(&buf->shmBuf);
+        }
+        head = buf->next;
+        free(buf);
+    }
+}
 
-struct InputBuffer {
-    char        *buf; /* virtual address for local access, 4kb stride */
-    SSPtr        y, uv; /* physical addresses of Y and UV for remote access */
-    InputBuffer *next;      /* next free buffer */
-    bool         tiler;
-    uint32_t     len;
-};
+int input_allocate(IVIDEO2_BufDesc *inBufs, int cnt,
+                    int width, int height)
+{
+    inBufs->imagePitch[0] = 4096;
+    inBufs->planeDesc[0].memType = XDM_MEMTYPE_TILED8;
+    inBufs->planeDesc[0].bufSize.tileMem.width	= width;
+    inBufs->planeDesc[0].bufSize.tileMem.height = height;
+
+    inBufs->secondFieldOffsetWidth[1] = 1;
+    inBufs->secondFieldOffsetHeight[1] = 0;
+
+    inBufs->imagePitch[1] = 4096;
+    inBufs->planeDesc[1].memType = XDM_MEMTYPE_TILED16;
+    inBufs->planeDesc[1].bufSize.tileMem.width	= width; /* UV interleaved width is same a Y */
+    inBufs->planeDesc[1].bufSize.tileMem.height = height / 2;
+
+    // INPUT BUFFER MUST BE in NV12.
+    while( cnt ) {
+        InputBuffer *buf = calloc(sizeof(InputBuffer), 1);
+        if( buf == NULL ) {
+            input_free();
+            return (-ENOMEM);
+        }
+
+        DEBUG(" ----------------- create input TILER buf 0x%x --------------------", (unsigned int)buf);
+
+        buf->buf = tiler_alloc(width, height);
+        if( buf->buf ) {
+            buf->y   = (SSPtr) buf->buf;
+            buf->uv  = (SSPtr)(buf->buf + (height * 4096));
+
+            DEBUG("INPUT TILER cnt=%d buf=%p, buf->buf=%p y=%08x, uv=%08x", cnt, buf, buf->buf, buf->y, buf->uv);
+
+            buf->tiler = TRUE;
+            buf->next = head;
+            head = buf;
+        } else {
+            ERROR("DCE_ENCODE_TEST_FAIL: TILER ALLOCATION FAILED");
+            free(buf);
+            return (-ENOMEM);
+        }
+        cnt--;
+    }
+
+    return (0);
+}
+
+int input_allocate_nonTiler(IVIDEO2_BufDesc *inBufs, int cnt,
+                             int width, int height)
+{
+    int err = 0;
+
+    inBufs->imagePitch[0] = width;
+    inBufs->planeDesc[0].memType = XDM_MEMTYPE_RAW;
+    inBufs->planeDesc[0].bufSize.bytes = width * height;
+    inBufs->secondFieldOffsetWidth[1] = 1;
+    inBufs->secondFieldOffsetHeight[1] = 0;
+
+    inBufs->imagePitch[1] = width;
+    inBufs->planeDesc[1].memType = XDM_MEMTYPE_RAW;
+    inBufs->planeDesc[1].bufSize.bytes = width * height / 2;
+
+    while( cnt ) {
+        InputBuffer *buf = calloc(sizeof(InputBuffer), 1);
+        if( buf == NULL ) {
+            input_free();
+            return (-ENOMEM);
+        }
+
+        DEBUG(" ----------------- create NON INPUT TILER buf 0x%x --------------------", (unsigned int)buf);
+
+        err = allocate_nonTiler(&buf->shmBuf, width * height * 3/2);
+        if( err < 0 ) {
+            ERROR("DCE_ENCODE_TEST_FAIL: NON-TILER ALLOCATION FAILED");
+            free(buf);
+            return (-ENOMEM);
+        }
+        else
+        {
+            buf->buf = (char*)buf->shmBuf.vir_addr;
+            buf->y = (SSPtr)buf->shmBuf.vir_addr;
+            buf->uv  = (SSPtr)buf->shmBuf.vir_addr + (height * width);
+
+            DEBUG("INPUT NON TILER buf=%p, buf->buf=%p y=%08x, uv=%08x", buf, buf->buf, buf->y, buf->uv);
+        }
+
+        buf->next = head;
+        buf->tiler = FALSE;
+        head = buf;
+
+        cnt--;
+    }
+
+    return (0);
+}
+
+InputBuffer *input_get(void)
+{
+    InputBuffer   *buf = head;
+
+    if( buf ) {
+        head = buf->next;
+    }
+    DEBUG("input_get: %p buf->next %p", buf, buf->next);
+    DEBUG("input_get TEST buf->buf: %p", buf->buf);
+    return (buf);
+}
+
+void input_release(InputBuffer *buf)
+{
+    DEBUG("input_release: %p", buf);
+    buf->next = head;
+    head = buf;
+}
 
 /* ************************************************************************* */
 
@@ -232,20 +404,120 @@ static const char *get_path(const char *pattern, int cnt)
     return (path);
 }
 
-//#define DUMPINPUTDATA
-//#define DUMPOUTPUTDATA
+int read_partial_input(const char *pattern, int cnt, char *input, int rowmode, int numBlock)
+{
+    int    sz = 0, n = 0, num_planes, i, buf_height;
+    char *input_y = (char *) ((int) input + dest_y_offset);
+    char *input_uv = (char *) ((int) input + dest_uv_offset);
 
-#ifdef DUMPINPUTDATA
-FILE   *inputDump;
+    const char   *path = get_path(pattern, cnt);
+    if( path == NULL ) {
+        return (sz);
+    }
+
+    int fd = open(path, O_RDONLY);
+    if( fd < 0 ) {
+        ERROR("open input file failed");
+        return (-1);
+    }
+
+#ifdef ROWMODE_INPUTDUMP
+    ++read_input_count;
 #endif
 
-#ifdef DUMPOUTPUTDATA
-FILE   *outputDump;
-#endif
+    // For rowmode, filling the input in NV12 format per numBlock.
+    // For numBlock = 1, that means application has written (provided)
+    // width * 16 (luma pixels) of input data in input buffer & width * 8 (chroma pixels).
+    for( num_planes = 0; num_planes < 2; num_planes++ ) {
+        if( num_planes ) { //UV location - num_plane = 1
+            buf_height = numBlock * 16 / 2;
+        } else { //Y location - num_plane = 0
+            buf_height = numBlock * 16;
+        }
 
+        for( i = 0; i < buf_height; i++ ) {
+            if( num_planes ) { // UV location - num_plane = 1
+                if( dest_uv_offset < (width * height * 1.5) ) {
+                    lseek(fd, input_uv_offset, SEEK_SET);
+                    n = read(fd, input_uv , width);
+                    if( n ) {
+                        sz += n;
+                        input_uv_offset += n;
+                    } else {
+                        close(fd);
+                        DEBUGLOW("Reading REACH EOF - return -1");
+                        endOfFile = 1;
+                        return (-1); //Cannot read anymore input
+                    }
+
+                    if( tiler ) {
+                        input_uv = (char *) ((int)input_uv + 4096);
+                        dest_uv_offset += 4096;
+                    } else {
+                        input_uv = (char *) ((int)input_uv + width);
+                        dest_uv_offset += width;
+                    }
+                } else {
+                //DEBUGLOW("dest_uv_offset %d >= width * height * 1.5 %d", (int)dest_uv_offset, (int) (width * height * 1.5));
+                }
+            } else { // Y location - num_plane = 0
+                if( dest_y_offset < (width * height) ) {
+                    lseek(fd, input_y_offset, SEEK_SET);
+                    n = read(fd, input_y , width);
+                    if( n ) {
+                        sz += n;
+                        input_y_offset += n;
+                    } else {
+                        close(fd);
+                        DEBUGLOW("Reading REACH EOF - return -1");
+                        endOfFile = 1;
+                        return (-1); //Cannot read anymore input
+                    }
+
+                    if( tiler ) {
+                        input_y = (char *) ((int)input_y + 4096);
+                        dest_y_offset += 4096;
+                    } else {
+                        input_y = (char *) ((int)input_y + width);
+                        dest_y_offset += width;
+                    }
+                } else {
+                //DEBUGLOW("dest_y_offset %d >= width * height %d", dest_y_offset, width * height);
+                }
+            }
+        }
+    }
+
+#ifdef ROWMODE_INPUTDUMP
+    if ( read_input_count % 68 == 0 ) {
+        //Dump the file
+        if( inputDump == NULL ) {
+            if( GlobalCount1 <= 50 ) {
+                sprintf(Buff1, "/tmp/dceinputdump%d.bin", GlobalCount1);
+                inputDump = fopen(Buff1, "wb+");
+                if( inputDump == NULL ) {
+                     ERROR("Opening input Dump /tmp/dceinputdump%d.bin file FAILED", GlobalCount1);
+                } else {
+                    GlobalCount1++;
+                    fwrite(input, 1, width * height * 3 / 2, inputDump);
+                    DEBUGLOW("Dumping input file of NV12 format with read data of %d inside buffersize = %d", n, width * height * 3 / 2);
+                    fflush(inputDump);
+                fclose(inputDump);
+                inputDump = NULL;
+            }
+            }
+        }
+    }
+#endif
+    DEBUGLOW("read_partial_input close fd");
+    close(fd);
+
+    DEBUGLOW("sz=%d", sz);
+    return (sz);
+}
 
 /* helper to read one frame NV12 of input */
-int read_input(const char *pattern, int cnt, char *input)
+int read_input(const char *pattern, int cnt, char *input, int rowmode)
 {
     int    sz = 0, n = 0, num_planes, i, buf_height;
 
@@ -255,23 +527,19 @@ int read_input(const char *pattern, int cnt, char *input)
     }
 
     int fd = open(path, O_RDONLY);
-
-    //DEBUG("Open file fd %d errno %d", fd, errno);
     if( fd < 0 ) {
         DEBUG("open input file failed");
         return (-1);
     }
-
-    sz = width * height * 3 / 2;
 
     // Filling the input in NV12 format; where
     // Luma has size of Stride "4096" * height for TILER or width * height
     // and Chroma has size of Stride "4096 * height / 2 for TILER or
     // width * height / 2
     for( num_planes = 0; num_planes < 2; num_planes++ ) {
-        if( num_planes ) { //UV location
+        if( num_planes ) { //UV location - num_plane = 1
             buf_height = height / 2;
-        } else { //Y location
+        } else { //Y location - num_plane = 0
             buf_height = height;
         }
 
@@ -279,10 +547,12 @@ int read_input(const char *pattern, int cnt, char *input)
             lseek(fd, input_offset, SEEK_SET);
             n = read(fd, input, width);
             if( n ) {
+                sz += n;
                 input_offset += n;
             } else {
                 close(fd);
                 DEBUG("Reading REACH EOF - return -1");
+                endOfFile = 1;
                 return (-1); //Cannot read anymore input
             }
 
@@ -294,6 +564,7 @@ int read_input(const char *pattern, int cnt, char *input)
         }
     }
 
+    DEBUG("read_input close fd");
     close(fd);
 
     DEBUG("sz=%d", sz);
@@ -341,12 +612,43 @@ uint64_t mark_microsecond(uint64_t *last)
     }
     return (t1);
 }
-
 #endif
 
-#ifdef GETVERSION
-#define VERSION_SIZE 128
-#endif
+/* Function callback for low latency encoder with NUMROWS*/
+/* Client is expected to fill the dataSyncDesc information especially numBlocks for codec to continue */
+/* numBlocks is filled based on the input data being filled into the input buffer that was passed in VIDENC2_process */
+/* The return value of this function is NULL when okay; if there is a problem return value < 0, then LIBDCE will always retry */
+XDAS_Int32 H264E_MPU_GetDataFxn(XDM_DataSyncHandle dataSyncHandle, XDM_DataSyncDesc *dataSyncDesc)
+{
+    int    n;
+
+    DEBUGLOW("-----------------------START--------------------------------");
+    //sleep(1); //instrument a 1s delay on the MPU side to get numblocks.
+    //DEBUGLOW("After 1sec Received H264E_MPU_GetDataFxn 0x%x", (unsigned int)dataSyncHandle);
+    // Need to read and write the amount put into the inputBuffer.
+    // Need to write numBlock into the inputBuffer and update the data here to be passed down to M4.
+
+    // Set NumBlock to be equal height/(16 * 2); eg. 1088 / (16 * 2) =  34 rows; meaning 34*16 height of data each time.
+    numBlock = ALIGN2(height, 4) / (16 * 2);
+
+    DEBUGLOW("Before read_partial_input numBlock %d buf->buf %p input_y_offset %d input_uv_offset %d dest_y_offset %d dest_uv_offset %d", numBlock, buf->buf, input_y_offset, input_uv_offset, dest_y_offset, dest_uv_offset);
+    n = read_partial_input(in_pattern, in_cnt, buf->buf, TRUE, numBlock);
+    DEBUGLOW("After read_partial_input buf->buf %p input_y_offset %d input_uv_offset %d dest_y_offset %d dest_uv_offset %d", buf->buf, input_y_offset, input_uv_offset, dest_y_offset, dest_uv_offset);
+    if( n > 0) {
+        if (dataSyncHandle == codec) {
+            dataSyncDesc->size = sizeof(XDM_DataSyncDesc);  // Size of this structure
+            dataSyncDesc->scatteredBlocksFlag = XDAS_FALSE; // Flag indicates whether the individual data blocks may be scatttered in memory.
+            dataSyncDesc->baseAddr = (XDAS_Int32*) buf->buf;
+            dataSyncDesc->numBlocks = numBlock;
+            dataSyncDesc->varBlockSizesFlag = XDAS_FALSE;
+            dataSyncDesc->blockSizes= NULL;
+            DEBUGLOW("H264E_MPU_GetDataFxn dataSyncDesc->size %d dataSyncDesc->baseAddr 0x%x dataSyncDesc->numBlocks %d", (unsigned int)dataSyncDesc->size, (unsigned int)dataSyncDesc->baseAddr, (unsigned int)dataSyncDesc->numBlocks);
+        }
+    }
+    DEBUGLOW("read_partial_input is returning size of %d", n);
+    DEBUGLOW("-----------------------END--------------------------------");
+    return (0);
+}
 
 /* encoder body */
 int main(int argc, char * *argv)
@@ -357,21 +659,18 @@ int main(int argc, char * *argv)
     char           *output_mvbuf =  NULL;
     shm_buf         output_mvbuf_nonTiler;
     shm_buf         output_nonTiler;
-    shm_buf         input_nonTiler;
     int             output_size = 0;
     int             mvbufinfo_size = 0;
-    char           *in_pattern, *out_pattern;
-    int             in_cnt = 0, out_cnt = 0;
-    InputBuffer    *buf = NULL;
     char            profile[10];
     int             profile_value;
     int             level;
-    int             eof = 0;
     char            vid_codec[10];
     char            tilerbuffer[10];
     unsigned int    codec_switch = 0;
     int             bytesGenerated = 0;
     int             frames_to_write = 0;
+    char            row_mode[10];
+    int             datamode;
 
 #ifdef PROFILE_TIME
     uint64_t    init_start_time = 0;
@@ -394,12 +693,12 @@ int main(int argc, char * *argv)
         argv++;
     }
 
-    if( argc != 10 ) {
-        printf("usage:   %s width height frames_to_write inpattern outpattern codec baseline/high level buffertype\n", argv[0]);
-        printf("example: %s 1920 1088 300 in.yuv out.h264 h264 baseline 10 tiler\n", argv[0]);
-        printf("example: %s 176 144 300 in.yuv out.m4v mpeg4 simple/baseline 0 non-tiler\n", argv[0]);
-        printf("example: %s 176 144 300 in.yuv out.m4v h263 simple/baseline 0 tiler\n", argv[0]);
-        printf("Currently supported codecs: h264 or mpeg4 or h263\n");
+    if( argc != 11 ) {
+        printf("usage:   %s width height frames_to_write inpattern outpattern codec baseline/high level buffertype mode\n", argv[0]);
+        printf("example: %s 1920 1088 300 in.yuv out.h264 h264 baseline 10 tiler numrow/slice/fixed/full\n", argv[0]);
+        printf("example: %s 176 144 300 in.yuv out.m4v mpeg4 simple/baseline 0 non-tiler full\n", argv[0]);
+        printf("example: %s 176 144 300 in.yuv out.m4v h263 simple/baseline 0 tiler full\n", argv[0]);
+        printf("Currently supported codecs: h264 or mpeg4 or h263 full\n");
         printf("Run this command for help on the use case: use dce_enc_test\n");
         return (1);
     }
@@ -413,9 +712,11 @@ int main(int argc, char * *argv)
     strcpy(profile, argv[7]);
     level = atoi(argv[8]);
     strcpy(tilerbuffer, argv[9]);
+    strcpy(row_mode, argv[10]);
 
     printf("Selected codec: %s\n", vid_codec);
     printf("Selected buffer: %s\n", tilerbuffer);
+    printf("Encode mode: %s\n", row_mode);
 
     enum {
         DCE_ENC_TEST_H264  = 1,
@@ -518,6 +819,27 @@ int main(int argc, char * *argv)
         return (1);
     }
 
+    if((!(strcmp(row_mode, "full")))) {
+        datamode = IVIDEO_ENTIREFRAME;
+    } else if ((!(strcmp(row_mode, "numrow")))) {
+        datamode = IVIDEO_NUMROWS;
+    } else if ((!(strcmp(row_mode, "slice")))) {
+        datamode = IVIDEO_SLICEMODE;
+        ERROR("SLICE mode is not supported.");
+        goto shutdown;
+    } else if ((!(strcmp(row_mode, "fixed")))) {
+        datamode = IVIDEO_FIXEDLENGTH;
+        ERROR("FIXED LENGTH mode is not supported.");
+        goto shutdown;
+    } else {
+        ERROR("WRONG argument mode %s", row_mode);
+        goto shutdown;
+    }
+
+    if( (codec_switch != DCE_ENC_TEST_H264) && (datamode != IVIDEO_ENTIREFRAME) ) {
+        ERROR("WRONG argument codec type %s mode %s", vid_codec, row_mode);
+        goto shutdown;
+    }
     DEBUG("width=%d, height=%d", width, height);
 
     /* output buffer parameters is aligned */
@@ -528,13 +850,13 @@ int main(int argc, char * *argv)
         case DCE_ENC_TEST_H264 :
         case DCE_ENC_TEST_MPEG4 :
         case DCE_ENC_TEST_H263 :
-            num_buffers = 1;
+            num_buffers = 2;
             break;
         default :
             ERROR("Unrecognized codec to encode");
     }
 
-    DEBUG("width=%d, height=%d, num_buffers=%d",
+    DEBUG("After alignment width=%d, height=%d, num_buffers=%d",
           width, height, num_buffers);
 
 #ifdef PROFILE_TIME
@@ -548,104 +870,6 @@ int main(int argc, char * *argv)
     }
 
     DEBUG("Engine_open successful engine=%p", engine);
-
-/*
- * inBufs handling
- */
-    DEBUG("input buffer configuration width %d height %d", width, height);
-    inBufs = dce_alloc(sizeof(IVIDEO2_BufDesc));
-
-    DEBUG("Input allocate through tiler");
-
-#ifdef PROFILE_TIME
-    uint64_t    alloc_time_start = mark_microsecond(NULL);
-#endif
-
-    inBufs->numPlanes = 2;
-    inBufs->imageRegion.topLeft.x = 0;
-    inBufs->imageRegion.topLeft.y = 0;
-    inBufs->imageRegion.bottomRight.x = width;
-
-    inBufs->topFieldFirstFlag = 0; //Only valid for interlace content.
-    inBufs->contentType = IVIDEO_PROGRESSIVE;
-
-    inBufs->activeFrameRegion.topLeft.x = 0;
-    inBufs->activeFrameRegion.topLeft.y = 0;
-    inBufs->activeFrameRegion.bottomRight.x = width;
-    inBufs->activeFrameRegion.bottomRight.y = height;
-
-    inBufs->imageRegion.bottomRight.y = height;
-    inBufs->chromaFormat = XDM_YUV_420SP;
-
-    inBufs->secondFieldOffsetWidth[0] = 0;
-    inBufs->secondFieldOffsetHeight[0] = 0;
-
-    if( !(strcmp(tilerbuffer, "tiler")) ) {
-        DEBUG("Input allocate through TILER 2D");
-        tiler = 1;
-
-        inBufs->imagePitch[0] = 4096;
-        inBufs->planeDesc[0].memType = XDM_MEMTYPE_TILED8;
-        inBufs->planeDesc[0].bufSize.tileMem.width  = width;
-        inBufs->planeDesc[0].bufSize.tileMem.height = height;
-
-        inBufs->secondFieldOffsetWidth[1] = 1;
-        inBufs->secondFieldOffsetHeight[1] = 0;
-
-        inBufs->imagePitch[1] = 4096;
-        inBufs->planeDesc[1].memType = XDM_MEMTYPE_TILED16;
-        inBufs->planeDesc[1].bufSize.tileMem.width  = width; /* UV interleaved width is same a Y */
-        inBufs->planeDesc[1].bufSize.tileMem.height = height / 2;
-
-        // INPUT BUFFER MUST BE TILED NV12. Encoder codec doesn't support non TILED input buffer.
-        buf = calloc(sizeof(InputBuffer), 1);
-        DEBUG(" ----------------- create INPUT TILER buf 0x%x --------------------", (unsigned int)buf);
-        buf->buf = tiler_alloc(width, height);
-        if( buf->buf ) {
-            buf->y   = (SSPtr)buf->buf;
-            buf->uv  = (SSPtr)buf->buf + (height * 4096);
-
-            DEBUG("INPUT TILER buf=%p, buf->buf=%p y=%08x, uv=%08x", buf, buf->buf, buf->y, buf->uv);
-        } else {
-            ERROR("DCE_ENCODE_TEST_FAIL: TILER ALLOCATION FAILED");
-            goto shutdown;
-        }
-    } else {
-        DEBUG("Input allocate through NON-TILER");
-        tiler = 0;
-
-        inBufs->imagePitch[0] = width;
-        inBufs->planeDesc[0].memType = XDM_MEMTYPE_RAW;
-        inBufs->planeDesc[0].bufSize.bytes = width * height;
-        inBufs->secondFieldOffsetWidth[1] = 1;
-        inBufs->secondFieldOffsetHeight[1] = 0;
-
-        inBufs->imagePitch[1] = width;
-        inBufs->planeDesc[1].memType = XDM_MEMTYPE_RAW;
-        inBufs->planeDesc[1].bufSize.bytes = width * height / 2;
-        buf = calloc(sizeof(InputBuffer), 1);
-        DEBUG(" ----------------- create NON INPUT TILER buf 0x%x --------------------", (unsigned int)buf);
-        err = allocate_nonTiler(&input_nonTiler, width * height * 3/2);
-        if( err < 0 ) {
-            ERROR("DCE_ENCODE_TEST_FAIL: NON-TILER ALLOCATION FAILED");
-            free(buf);
-            goto shutdown;
-        }
-        else
-        {
-            buf->buf = (char*)input_nonTiler.vir_addr;
-            buf->y   = (SSPtr)input_nonTiler.vir_addr;
-            buf->uv  = (SSPtr)input_nonTiler.vir_addr + (height * width);
-
-            DEBUG("INPUT NON TILER buf=%p, buf->buf=%p y=%08x, uv=%08x", buf, buf->buf, buf->y, buf->uv);
-        }
-    }
-
-#ifdef PROFILE_TIME
-    input_alloc_time = mark_microsecond(&alloc_time_start);
-#endif
-
-    DEBUG("input buffer configuration num_buffers %d width %d height %d", num_buffers, width, height);
 
 /*
  * inArgs and outArgs configuration for static parameter passed during codec creation.
@@ -690,7 +914,15 @@ int main(int argc, char * *argv)
     params->operatingMode = IVIDEO_ENCODE_ONLY; //IVIDEO_OperatingMode
     params->profile = profile_value;
     params->level = level;
-    params->inputDataMode = IVIDEO_ENTIREFRAME; //IVIDEO_DataMode
+
+    if (datamode == IVIDEO_NUMROWS) {
+        params->inputDataMode = IVIDEO_NUMROWS;
+        params->numInputDataUnits = 1;
+    } else {
+        params->inputDataMode = IVIDEO_ENTIREFRAME; //IVIDEO_DataMode
+        params->numInputDataUnits = 1;
+    }
+
     params->outputDataMode = IVIDEO_ENTIREFRAME; //IVIDEO_DataMode
     params->numInputDataUnits = 1;
     params->numOutputDataUnits = 1;
@@ -698,7 +930,7 @@ int main(int argc, char * *argv)
     params->metadataType[1] = IVIDEO_METADATAPLANE_NONE;
     params->metadataType[2] = IVIDEO_METADATAPLANE_NONE;
 
-    DEBUG("dce_alloc VIDENC2_Params successful params=%p", params);
+    DEBUG("dce_alloc VIDENC2_Params successful params=%p inputDataMode(2=IVIDEO_NUMROWS) %d", params, params->inputDataMode);
 
     switch( codec_switch ) {
         case DCE_ENC_TEST_H264 :
@@ -980,7 +1212,14 @@ int main(int argc, char * *argv)
     dynParams->ignoreOutbufSizeFlag = XDAS_FALSE;  // If this is XDAS_TRUE then getBufferFxn and getBufferHandle needs to be set.
     dynParams->putDataFxn = NULL;
     dynParams->putDataHandle = NULL;
-    dynParams->getDataFxn = NULL;
+
+    if (datamode == IVIDEO_NUMROWS) {
+        dynParams->getDataFxn = (XDM_DataSyncGetFxn) H264E_MPU_GetDataFxn;
+        DEBUGLOW("dynParams->getDataFxn %p", dynParams->getDataFxn);
+    } else {
+        dynParams->getDataFxn = NULL;
+    }
+
     dynParams->getDataHandle = NULL;
     dynParams->getBufferFxn = NULL;
     dynParams->getBufferHandle = NULL;
@@ -1096,7 +1335,6 @@ int main(int argc, char * *argv)
             err = VIDENC2_control(codec, XDM_GETVERSION, (VIDENC2_DynamicParams *) h264enc_dynParams, (VIDENC2_Status *) h264enc_status);
             DEBUG("VIDENC2_control IH264ENC_Status XDM_GETVERSION h264enc_status->data.buf = %s", (((VIDENC2_Status *)h264enc_status)->data.buf));
 #endif
-
             h264enc_status = (IH264ENC_Status *) status;
             err = VIDENC2_control(codec, XDM_SETPARAMS, (VIDENC2_DynamicParams *) h264enc_dynParams, (VIDENC2_Status *) h264enc_status);
             DEBUG("dce_alloc IH264ENC_Status successful h264enc_status=%p", h264enc_status);
@@ -1158,7 +1396,64 @@ int main(int argc, char * *argv)
     // XDM_GETBUFINFO
     // Send Control cmd XDM_GETBUFINFO to get min output and output size
     err = VIDENC2_control(codec, XDM_GETBUFINFO, dynParams, status);
-    DEBUG("VIDENC2_control - XDM_GETBUFINFO err %d status numOutBuf %d OutBufSize %d MVBufInfo %d", err, status->bufInfo.minNumOutBufs, status->bufInfo.minOutBufSize[0].bytes, status->bufInfo.minOutBufSize[1].bytes);
+    DEBUG("VIDENC2_control - XDM_GETBUFINFO err %d status numInBuf %d minInBufSize[0] %d minInBufSize[1] %d", err, status->bufInfo.minNumInBufs, status->bufInfo.minInBufSize[0].bytes, status->bufInfo.minInBufSize[1].bytes);
+    num_buffers = status->bufInfo.minNumInBufs;
+
+/*
+ * inBufs handling
+ */
+    DEBUG("input buffer configuration width %d height %d", width, height);
+    inBufs = dce_alloc(sizeof(IVIDEO2_BufDesc));
+
+    DEBUG("Input inBufs 0x%x allocate through dce_alloc", (unsigned int) inBufs);
+
+#ifdef PROFILE_TIME
+    uint64_t    alloc_time_start = mark_microsecond(NULL);
+#endif
+
+    inBufs->numPlanes = 2;
+    inBufs->imageRegion.topLeft.x = 0;
+    inBufs->imageRegion.topLeft.y = 0;
+    inBufs->imageRegion.bottomRight.x = width;
+
+    inBufs->topFieldFirstFlag = 0; //Only valid for interlace content.
+    inBufs->contentType = IVIDEO_PROGRESSIVE;
+
+    inBufs->activeFrameRegion.topLeft.x = 0;
+    inBufs->activeFrameRegion.topLeft.y = 0;
+    inBufs->activeFrameRegion.bottomRight.x = width;
+    inBufs->activeFrameRegion.bottomRight.y = height;
+
+    inBufs->imageRegion.bottomRight.y = height;
+    inBufs->chromaFormat = XDM_YUV_420SP;
+
+    inBufs->secondFieldOffsetWidth[0] = 0;
+    inBufs->secondFieldOffsetHeight[0] = 0;
+
+    if( !(strcmp(tilerbuffer, "tiler")) ) {
+        DEBUG("Input allocate through TILER 2D");
+        tiler = 1;
+        input_allocate(inBufs, num_buffers, width, height);
+    } else {
+        DEBUG("Input allocate through NON-TILER");
+        tiler = 0;
+        input_allocate_nonTiler(inBufs, num_buffers, width, height);
+    }
+
+#ifdef PROFILE_TIME
+    input_alloc_time = mark_microsecond(&alloc_time_start);
+#endif
+
+    if (datamode == IVIDEO_NUMROWS) {
+        if( tiler ) {
+            input_uv_offset = input_y_offset + (4096 * height);
+        } else {
+            input_uv_offset = input_y_offset + (width * height);
+        }
+        DEBUG("input_y_offset %d input_uv_offset %d ", input_y_offset, input_uv_offset);
+    }
+
+    DEBUG("input buffer configuration num_buffers %d width %d height %d", num_buffers, width, height);
 
 /*
  * outBufs handling
@@ -1226,15 +1521,39 @@ int main(int argc, char * *argv)
 /*
  * codec process
  */
-    while( inBufs->numPlanes && outBufs->numBufs ) {
-        int    n;
-        DEBUG("Looping on reading input inBufs->numPlanes %d outBufs->numBufs %d", inBufs->numPlanes, outBufs->numBufs);
+    while ( !endOfFile) {
+        int    n = 0;
+        buf = input_get();
+        DEBUG("input_get buf %p", buf);
+        if( !buf ) {
+            ERROR("DCE_TEST_FAIL: out of buffers");
+            goto shutdown;
+        }
 
-        //Read the NV12 frame to input buffer to be encoded.
-        n = read_input(in_pattern, in_cnt, buf->buf);
+        if (datamode == IVIDEO_ENTIREFRAME) {
+            //Read the NV12 frame to input buffer to be encoded.
+            n = read_input(in_pattern, in_cnt, buf->buf, FALSE);
+        } else if (datamode == IVIDEO_NUMROWS) {
+            int cnt = 0;
+            //Check if input has reached EOF - from the current input_uv_offset + 1 full frame
+            const char *path = get_path(in_pattern, cnt);
+            int fd = open(path, O_RDONLY);
+            DEBUGLOW("CHECK Position %d", input_uv_offset - 1 + (width * height / 2));
+            lseek(fd, input_uv_offset - 1 + (width * height / 2), SEEK_SET);
+            char temp_buf[100];
+            n = read(fd, temp_buf, sizeof(temp_buf));
+            DEBUGLOW("CHECK on the next input full frame n %d", n);
+            if (!n) {
+                DEBUGLOW("CHECK - next input full frame is Empty as n is %d - REACH EOF", n);
+                endOfFile = 1;
+                n = -1;
+            }
+        } else {
+            ERROR("NOT SUPPORTED MODE");
+            goto shutdown;
+        }
 
         if( n && (n != -1) ) {
-            eof = 0;
             inBufs->planeDesc[0].buf = (XDAS_Int8 *)buf->y;
             inBufs->planeDesc[1].buf = (XDAS_Int8 *)buf->uv;
             DEBUG("inBufs->planeDesc[0].buf %p inBufs->planeDesc[1].buf %p", inBufs->planeDesc[0].buf, inBufs->planeDesc[1].buf);
@@ -1242,95 +1561,28 @@ int main(int argc, char * *argv)
             in_cnt++;
 
             /*
-                       * Input buffer has data to be encoded.
-                       */
+             * Input buffer has data to be encoded.
+             */
             inArgs->inputID = (XDAS_Int32)buf;
             if( codec_switch == DCE_ENC_TEST_H264 ) {
                 h264enc_inArgs = (IH264ENC_InArgs *) inArgs;
-                DEBUG("TEST inArgs->inputID %d h264enc_inArgs->videnc2InArgs.inputID %d", inArgs->inputID, h264enc_inArgs->videnc2InArgs.inputID);
+                DEBUG("inArgs->inputID 0x%x h264enc_inArgs->videnc2InArgs.inputID %d", inArgs->inputID, h264enc_inArgs->videnc2InArgs.inputID);
             } else if( (codec_switch == DCE_ENC_TEST_MPEG4) || (codec_switch == DCE_ENC_TEST_H263) ) {
                 mpeg4enc_inArgs = (IMPEG4ENC_InArgs *) inArgs;
-                DEBUG("TEST inArgs->inputID %d mpeg4enc_inArgs->videnc2InArgs.inputID %d", inArgs->inputID, mpeg4enc_inArgs->videnc2InArgs.inputID);
+                DEBUG("inArgs->inputID 0x%x mpeg4enc_inArgs->videnc2InArgs.inputID %d", inArgs->inputID, mpeg4enc_inArgs->videnc2InArgs.inputID);
             }
-        } else if( n == -1 ) {
+        } else if( (n == -1) && (endOfFile) ) {
 
-            // Set EOF as 1 to ensure flush completes
-            eof = 1;
             in_cnt++;
 
-            DEBUG("n == -1 - go to shutdown");
-
+            DEBUG("n == -1 and IT IS EOF - go to shutdown");
             goto shutdown;
-
-            switch( codec_switch ) {
-                case DCE_ENC_TEST_H264 :
-                    DEBUG("Calling VIDENC2_control XDM_FLUSH h264enc_dynParams %p h264enc_status %p", h264enc_dynParams, h264enc_status);
-                    err = VIDENC2_control(codec, XDM_FLUSH, (VIDENC2_DynamicParams *) h264enc_dynParams, (VIDENC2_Status *) h264enc_status);
-                    break;
-                case DCE_ENC_TEST_MPEG4 :
-                case DCE_ENC_TEST_H263 :
-                    DEBUG("Calling VIDENC2_control XDM_FLUSH mpeg4enc_dynParams %p mpeg4enc_status %p", mpeg4enc_dynParams, mpeg4enc_status);
-                    err = VIDENC2_control(codec, XDM_FLUSH, (VIDENC2_DynamicParams *) mpeg4enc_dynParams, (VIDENC2_Status *) mpeg4enc_status);
-                    break;
-                default :
-                    ERROR("Unrecognized codec to encode");
-            }
-
-            /* We have sent the XDM_FLUSH, call VIDENC2_process until we get
-                       * an error of XDM_EFAIL which tells us there are no more buffers
-                       * at codec level.
-                       */
-
-            inArgs->inputID = 0;
-            if( codec_switch == DCE_ENC_TEST_H264 ) {
-                h264enc_inArgs = (IH264ENC_InArgs *) inArgs;
-            } else if( (codec_switch == DCE_ENC_TEST_MPEG4) || (codec_switch == DCE_ENC_TEST_H263) ) {
-                mpeg4enc_inArgs = (IMPEG4ENC_InArgs *) inArgs;
-            }
-            inBufs->planeDesc[0].buf = NULL;
-            inBufs->planeDesc[0].bufSize.bytes = 0;
-            inBufs->planeDesc[1].buf = NULL;
-            inBufs->planeDesc[1].bufSize.bytes = 0;
-            outBufs->descs[0].buf = NULL;
-            outBufs->descs[1].buf = NULL;
         } else {
             /* end of input..  (n == 0) */
             inBufs->numPlanes = 0;
-            eof = 1;
-            DEBUG("n == 0 - go to shutdown");
+            DEBUG("n == 0 and NOT slice mode - go to shutdown");
 
             goto shutdown;
-
-            switch( codec_switch ) {
-                case DCE_ENC_TEST_H264 :
-                    DEBUG("Calling VIDENC2_control XDM_FLUSH h264enc_dynParams %p h264enc_status %p", h264enc_dynParams, h264enc_status);
-                    err = VIDENC2_control(codec, XDM_FLUSH, (VIDENC2_DynamicParams *) h264enc_dynParams, (VIDENC2_Status *) h264enc_status);
-                    break;
-                case DCE_ENC_TEST_MPEG4 :
-                case DCE_ENC_TEST_H263 :
-                    DEBUG("Calling VIDENC2_control XDM_FLUSH mpeg4enc_dynParams %p mpeg4enc_status %p", mpeg4enc_dynParams, mpeg4enc_status);
-                    err = VIDENC2_control(codec, XDM_FLUSH, (VIDENC2_DynamicParams *) mpeg4enc_dynParams, (VIDENC2_Status *) mpeg4enc_status);
-                    break;
-                default :
-                    ERROR("Unrecognized codec to encode");
-            }
-
-            /* We have sent the XDM_FLUSH, call VIDENC2_process until we get
-                       * an error of XDM_EFAIL which tells us there are no more buffers
-                       * at codec level.
-                       */
-
-            inArgs->inputID = 0;
-            if( codec_switch == DCE_ENC_TEST_H264 ) {
-                h264enc_inArgs = (IH264ENC_InArgs *) inArgs;
-            } else if( (codec_switch == DCE_ENC_TEST_MPEG4) || (codec_switch == DCE_ENC_TEST_H263) ) {
-                mpeg4enc_inArgs = (IMPEG4ENC_InArgs *) inArgs;
-            }
-            inBufs->planeDesc[0].buf = NULL;
-            inBufs->planeDesc[0].bufSize.bytes = 0;
-            inBufs->planeDesc[1].buf = NULL;
-            inBufs->planeDesc[1].bufSize.bytes = 0;
-            outBufs->descs[0].buf = NULL;
         }
 
 #ifdef DUMPINPUTDATA
@@ -1338,14 +1590,12 @@ int main(int argc, char * *argv)
 
         //Dump the file
         if( inputDump == NULL ) {
-
             if( GlobalCount1 <= 50 ) {
-                DEBUG("[DCE_ENC_TEST] GlobalCount1 %d\n", GlobalCount1);
-                sprintf(Buff1, "/sd/dce_enc_dump/dceinputdump%d.bin", GlobalCount1);
+                sprintf(Buff1, "/tmp/dceinputdump%d.bin", GlobalCount1);
                 inputDump = fopen(Buff1, "wb+");
                 //DEBUG("input data dump file open %p errno %d", inputDump, errno);
                 if( inputDump == NULL ) {
-                    DEBUG("Opening input Dump /sd/dce_enc_dump/dceinputdump.bin file FAILED");
+                    DEBUG("Opening input Dump /tmp/dceinputdump%d.bin file FAILED", GlobalCount1);
                 } else {
                     GlobalCount1++;
                     //DEBUG("Before Input [%p]\n", input);
@@ -1357,11 +1607,11 @@ int main(int argc, char * *argv)
                     inputDump = NULL;
                 }
             }
-            //DEBUG("input data dump file open %p Successful", inputDump);
         }
 #endif
 
         int    iters = 0;
+        int    i = 0;
 
         do {
 
@@ -1384,13 +1634,20 @@ int main(int argc, char * *argv)
             codec_process_time = mark_microsecond(NULL);
 #endif
 
+            if (datamode == IVIDEO_NUMROWS) {
+                dest_y_offset = 0;
+                if(tiler) {
+                    dest_uv_offset = 4096 * height;
+                } else {
+                    dest_uv_offset = width * height;
+                }
+            }
+
             if( codec_switch == DCE_ENC_TEST_H264 ) {
                 err = VIDENC2_process(codec, inBufs, outBufs, (VIDENC2_InArgs *) h264enc_inArgs, (VIDENC2_OutArgs *) h264enc_outArgs);
                 DEBUG("[DCE_ENC_TEST] VIDENC2_process - err %d", err);
 
                 if( err == DCE_EXDM_FAIL ) {
-                    int    i = 0;
-
                     for( i=0; i < IH264ENC_EXTERROR_NUM_MAXWORDS; i++ ) {
                         DEBUG("DETAIL EXTENDED ERROR h264enc_outArgs->extErrorCode[%d]=%08x", i, (uint)h264enc_outArgs->extErrorCode[i]);
                     }
@@ -1407,7 +1664,7 @@ int main(int argc, char * *argv)
                         ERROR("extendedError: %08x", h264enc_outArgs->videnc2OutArgs.extendedError);
                         ERROR("DCE_ENCODE_TEST_FAIL: CODEC FATAL ERROR");
                         goto shutdown;
-                    } else if( eof ) {
+                    } else if( endOfFile ) {
                         ERROR("Codec_process returned err=%d, extendedError=%08x", err, h264enc_outArgs->videnc2OutArgs.extendedError);
                         DEBUG("-------------------- Flush completed------------------------");
                     } else {
@@ -1434,7 +1691,7 @@ int main(int argc, char * *argv)
                         ERROR("extendedError: %08x", mpeg4enc_outArgs->videnc2OutArgs.extendedError);
                         ERROR("DCE_ENCODE_TEST_FAIL: CODEC FATAL ERROR");
                         goto shutdown;
-                    } else if( eof ) {
+                    } else if( endOfFile ) {
                         ERROR("Codec_process returned err=%d, extendedError=%08x", err, mpeg4enc_outArgs->videnc2OutArgs.extendedError);
                         DEBUG("-------------------- Flush completed------------------------");
                     } else {
@@ -1479,11 +1736,11 @@ int main(int argc, char * *argv)
                     if( outputDump == NULL ) {
                         if( GlobalCount2 <= 50 ) {
                             DEBUG("DCE_ENC_TEST GlobalCount2 %d\n", GlobalCount2);
-                            sprintf(Buff2, "/sd/dce_enc_dump/dceoutputdump%d.bin", GlobalCount2);
+                            sprintf(Buff2, "/tmp/dceoutputdump%d.bin", GlobalCount2);
                             outputDump = fopen(Buff2, "wb+");
                             //DEBUG("output data dump file open %p errno %d", outputDump, errno);
                             if( outputDump == NULL ) {
-                                DEBUG("Opening output Dump /sd/dce_enc_dump/dceoutputdump.bin file FAILED");
+                                DEBUG("Opening output Dump /tmp/dceoutputdump%d.bin file FAILED", GlobalCount2);
                             } else {
                                 GlobalCount2++;
                                 fwrite(output, 1, bytesGenerated, outputDump);
@@ -1504,15 +1761,34 @@ int main(int argc, char * *argv)
                 }
             }
 
-            ++iters; // Guard for infinite VIDENC2_PROCESS loop when codec never return XDM_EFAIL
-        } while( eof && (err != XDM_EFAIL) && (iters < 100));  // Multiple VIDENC2_process when eof until err == XDM_EFAIL
+            for( i=0; outArgs->freeBufID[i]; i++ ) {
+                DEBUG("freeBufID[%d] = %d", i, outArgs->freeBufID[i]);
+                buf = (InputBuffer *)outArgs->freeBufID[i];
+                input_release(buf);
+            }
 
+            ++iters; // Guard for infinite VIDENC2_PROCESS loop when codec never return XDM_EFAIL
+        } while( endOfFile && (err != XDM_EFAIL) && (iters < 100));  // Multiple VIDENC2_process when endOfFile until err == XDM_EFAIL
+
+        if (datamode == IVIDEO_NUMROWS) {
+            // Reset to the next frame; when VIDENC2_process return; 1 input frame should be encoded.
+            if( tiler ) {
+                input_y_offset += (4096 * height/2);
+                input_uv_offset += (4096 * height);
+            } else {
+                input_y_offset += (width * height/2);
+                input_uv_offset += (width * height);
+            }
+            DEBUG("input_y_offset %d input_uv_offset %d", input_y_offset, input_uv_offset);
+        }
     }
 
 shutdown:
 
-    printf("\nDeleting encoder codec...\n");
-    VIDENC2_delete(codec);
+    printf("\nDeleting encoder codec 0x%x...\n", (unsigned int) codec);
+    if( codec ) {
+        VIDENC2_delete(codec);
+    }
 
 out:
     if( engine ) {
@@ -1562,19 +1838,9 @@ out:
         }
     }
 
-    printf("\nFreeing buf %p...\n", buf);
-    if( buf ) {
-        if( buf->buf ) {
-            if( tiler ) {
-                printf("\nFreeing buf->buf %p...\n", buf->buf);
-                MemMgr_Free(buf->buf);
-            } else {
-                printf("\nFreeing input_nonTiler %p...\n", &input_nonTiler);
-                free_nonTiler(&input_nonTiler);
-            }
-        }
-        free(buf);
-    }
+    printf("\nFreeing input...\n");
+    input_free();
+
     printf("DCE ENC test completed...\n");
 
     return (0);

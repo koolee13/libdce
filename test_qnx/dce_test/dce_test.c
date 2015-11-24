@@ -63,6 +63,8 @@
 #include "ti/shmemallocator/SharedMemoryAllocatorUsr.h"
 
 #define PRINT_DEBUG
+//#define PRINT_DEBUG_LOW
+
 #define ERROR(FMT, ...)  printf("%s:%d:\t%s\terror: " FMT "\n", __FILE__, __LINE__, __FUNCTION__, ##__VA_ARGS__)
 // enable below to print debug information
 #ifdef PRINT_DEBUG
@@ -70,6 +72,13 @@
 #else
 #define DEBUG(FMT, ...)
 #endif
+
+#ifdef PRINT_DEBUG_LOW
+#define DEBUGLOW(FMT, ...)  printf("%s:%d:\t%s\tdebug: " FMT "\n", __FILE__, __LINE__, __FUNCTION__, ##__VA_ARGS__)
+#else
+#define DEBUGLOW(FMT, ...)
+#endif
+
 #define INFO(FMT, ...)  printf("%s:%d:\t%s\tinfo: " FMT "\n", __FILE__, __LINE__, __FUNCTION__, ##__VA_ARGS__)
 #define MIN(a, b)        (((a) < (b)) ? (a) : (b))
 
@@ -81,6 +90,8 @@
 
 // Getting codec version through XDM_GETVERSION
 #define GETVERSION
+
+#define STRIDE 4096
 
 enum {
     IVAHD_AVC1_DECODE,
@@ -94,12 +105,20 @@ enum {
     IVAHD_JPEGV_DECODE
 };
 
+// Used when datamode == IVIDEO_NUMROWS
+static int numBlock = 2;
+static int output_y_offset = 0;
+static int output_uv_offset = 0;
+static int numRow_y_offset = 0;
+static int numRow_uv_offset = 0;
+char *out_pattern;
+char *outBuf_lowlatency;
+
 /*
  * A very simple VIDDEC3 client which will decode h264 frames (one per file),
  * and write out raw (unstrided) nv12 frames (one per file).
  */
-
-int                      width, height, frames_to_write, padded_width, padded_height, num_buffers, tiler;
+int                      orig_width, orig_height, width, height, frames_to_write, padded_width, padded_height, num_buffers, tiler;
 Engine_Handle            engine    = NULL;
 VIDDEC3_Handle           codec     = NULL;
 VIDDEC3_Params          *params    = NULL;
@@ -129,6 +148,7 @@ IJPEGVDEC_Status          *mjpeg_status       = NULL;
 IMPEG2VDEC_Params          *mpeg2_params       = NULL;
 IMPEG2VDEC_DynamicParams   *mpeg2_dynParams    = NULL;
 IMPEG2VDEC_Status          *mpeg2_status       = NULL;
+int out_cnt = 0;
 
 unsigned int    frameSize[64000]; /* Buffer for keeping frame sizes */
 static int      input_offset = 0;
@@ -218,7 +238,7 @@ get_mem_type (uint32_t paddr)
 /* list of free buffers, not locked by codec! */
 static OutputBuffer   *head = NULL;
 
-#if 0
+#if 0 // OLD implementation when using DCE RLS 3.x
 /*! @brief Start address of DDR region for 1GB RAM */
 #define DDR_1G_ADDRESS_START           0x80000000
 /*! @brief End address of DDR region for 1GB RAM */
@@ -386,8 +406,8 @@ int output_allocate_nonTiler(XDM2_BufDesc *outBufs, int cnt,
 
         if((y_type < 0) || (uv_type < 0)) {
             DEBUG("non TILER buffer address translation buf->y %x buf->uv %x", buf->y, buf->uv);
-            //buf->y = SysLinkMemUtils_translateAddr(buf->y);
-            //buf->uv = SysLinkMemUtils_translateAddr(buf->uv);
+            //buf->y = SysLinkMemUtils_translateAddr(buf->y);  // Old Implementation when using DCE 3.x
+            //buf->uv = SysLinkMemUtils_translateAddr(buf->uv);  // Old Implementation when using DCE 3.x
             y_type = XDM_MEMTYPE_RAW;
             uv_type = XDM_MEMTYPE_RAW;
             DEBUG("buf->y %x buf->uv %x", buf->y, buf->uv);
@@ -495,11 +515,142 @@ int read_input(const char *pattern, int cnt, char *input)
     return (sz);
 }
 
+//#define DUMP_PARTIAL_OUTPUT
+
+// Used when outputDataMode = IVIDEO_NUMROWS
+#ifdef DUMP_PARTIAL_OUTPUT
+static int GlobalFileCount = 0;
+#endif
+static int total_numRows = 0;
+//Create 2 temp buffers for Y and UV
+char *y_buffer = NULL;
+int y_buffer_offset = 0;
+char *orig_y_buffer = NULL;
+char *uv_buffer = NULL;
+int uv_buffer_offset = 0;
+char *orig_uv_buffer = NULL;
+
+/* helper to write partial data into output file based on numRows (1 numRows = 16 row of height for luma and 8 row of height for chroma */
+int write_partial_output(const char *pattern, char *y, char *uv, int stride, int numRows)
+{
+    DEBUGLOW("write_partial_output pattern %s y 0x%x uv 0x%x numRow_y_offset %d numRow_uv_offset %d orig_width %d numRows %d",
+        pattern, (unsigned int) y, (unsigned int) uv, numRow_y_offset, numRow_uv_offset, orig_width, numRows);
+
+    int sz = 0, i;
+
+#ifdef DUMP_PARTIAL_OUTPUT
+    int size;
+    FILE *fp = NULL;
+
+    DEBUGLOW("write_partial_output total_numRows %d y_buffer 0x%x y_buffer_offset 0x%x uv_buffer 0x%x uv_buffer_offset 0x%x",
+        total_numRows, (unsigned int) y_buffer, (unsigned int) y_buffer_offset, (unsigned int) uv_buffer, (unsigned int)uv_buffer_offset);
+
+    char Buff1[100];
+    sprintf(Buff1, "/tmp/dec_y_dump%d.bin", GlobalFileCount);
+    fp = fopen(Buff1,"wb+");
+    if(fp == NULL)
+        ERROR(">> error in file create ");
+#endif
+
+    DEBUGLOW("write_partial_output y_buffer 0x%x y_buffer_offset 0x%x y 0x%x numRow_y_offset %d stride %d orig_width %d",
+        (unsigned int) y_buffer, (unsigned int) y_buffer_offset, (unsigned int) y, numRow_y_offset, stride, orig_width);
+
+    DEBUGLOW("memcpy y_buffer dst 0x%x src 0x%x size %d", (unsigned int) y_buffer + y_buffer_offset, (unsigned int) y + (numRow_y_offset * stride), orig_width);
+
+    for ( i = 0; i < (numRows * 16 ); i++) {
+        memcpy(y_buffer + y_buffer_offset, y + (numRow_y_offset * stride), orig_width);
+
+#ifdef DUMP_PARTIAL_OUTPUT
+        size = fwrite(y_buffer + y_buffer_offset, 1, orig_width, fp);
+        if(size)
+            DEBUGLOW(">> dumped size = %d in file %s", orig_width, Buff1);
+        else
+            ERROR(">> writing % size", size);
+#endif
+
+        y_buffer_offset += orig_width;
+        sz += orig_width;
+        numRow_y_offset++;
+    }
+
+#ifdef DUMP_PARTIAL_OUTPUT
+    fclose(fp);
+
+    char Buff2[100];
+    sprintf(Buff2, "/tmp/dce_uv_dump%d.bin", GlobalFileCount);
+    fp = fopen(Buff2,"wb+");
+    if(fp == NULL)
+        ERROR(">> error in file create ");
+#endif
+
+    DEBUGLOW("write_partial_output uv_buffer 0x%x uv_buffer_offset 0x%x uv 0x%x numRow_uv_offset %d stride %d orig_width %d",
+        (unsigned int) uv_buffer, (unsigned int) uv_buffer_offset, (unsigned int) uv, numRow_uv_offset, stride, orig_width);
+
+    DEBUGLOW("memcpy uv_buffer dst 0x%x src 0x%x size %d", (unsigned int) uv_buffer + uv_buffer_offset, (unsigned int) uv + (numRow_uv_offset * stride), orig_width);
+
+    for ( i = 0; i < (numRows * 8 ); i++) {
+        memcpy(uv_buffer + uv_buffer_offset, uv + (numRow_uv_offset * stride), orig_width);
+
+#ifdef DUMP_PARTIAL_OUTPUT
+        size = fwrite(uv_buffer + uv_buffer_offset, 1, orig_width, fp);
+        if(size)
+            DEBUGLOW(">> dumped size = %d in file %s", orig_width, Buff2);
+        else
+            ERROR(">> writing % size", size);
+#endif
+
+        uv_buffer_offset += orig_width;
+        sz += orig_width;
+        numRow_uv_offset++;
+    }
+
+#ifdef DUMP_PARTIAL_OUTPUT
+    fclose(fp);
+    GlobalFileCount++;
+#endif
+
+    total_numRows += numRows;
+    DEBUGLOW("total_numRows %d height / 16 = %d", total_numRows, height / 16);
+
+    if (total_numRows == (height / 16)) {
+        // Meaning 1 full frame has been reached. Need to write the temp y_buffer and uv_buffer to file.
+        if( out_cnt < frames_to_write ) {
+            DEBUGLOW("write_partial_output writing the output file");
+
+            FILE* fd = fopen(pattern,"ab+");
+            if( fd < 0 ) {
+                ERROR("could open output file: %s (%d)", pattern, errno);
+                return (0);
+            }
+
+            fwrite(y_buffer, 1, orig_width * orig_height, fd);
+            DEBUGLOW("write_partial_output writing %d size from Y_buffer 0x%x", orig_width * orig_height, (unsigned int) y_buffer);
+            fwrite(uv_buffer, 1, orig_width * orig_height/2, fd);
+            DEBUGLOW("write_partial_output writing %d size from UV_buffer 0x%x", orig_width * orig_height/2, (unsigned int) uv_buffer);
+
+            fclose(fd);
+        }
+
+        out_cnt++;
+        numRow_y_offset = 0;
+        numRow_uv_offset = 0;
+        y_buffer_offset = 0;
+        uv_buffer_offset = 0;
+        total_numRows = 0;
+    }
+
+    DEBUGLOW("write_partial_output is returning size of %d", sz);
+    return (sz);
+}
+
+
 /* helper to write one frame of output */
 int write_output(const char *pattern, int cnt, char *y, char *uv, int stride)
 {
     int           sz = 0, n = 0, i;
     const char   *path = get_path(pattern, cnt);
+
+    DEBUG("write_output y 0x%x uv 0x%x", (unsigned int) y, (unsigned int) uv);
 
     if( path == NULL ) {
         return (sz);
@@ -512,9 +663,9 @@ int write_output(const char *pattern, int cnt, char *y, char *uv, int stride)
         return (0);
     }
 
-    for( i = 0; i < height; i++ ) {
+    for( i = 0; i < orig_height; i++ ) {
         char   *p = y;
-        int     len = width;
+        int     len = orig_width;
 
         while( len && ((n = write(fd, p, len)) > 0)) {
             sz  += n;
@@ -530,9 +681,9 @@ int write_output(const char *pattern, int cnt, char *y, char *uv, int stride)
     }
 
     if( n >= 0 ) {
-        for( i = 0; i < height / 2; i++ ) {
+        for( i = 0; i < orig_height / 2; i++ ) {
             char   *p = uv;
-            int     len = width;
+            int     len = orig_width;
 
             while( len && ((n = write(fd, p, len)) > 0)) {
                 sz  += n;
@@ -588,14 +739,73 @@ FILE   *inputDump;
 #define VERSION_SIZE 128
 #endif
 
+/* Function callback for low latency decoder with NUMROWS*/
+/* Client is expected to read the dataSyncDesc information especially numBlocks for decoded output that is ready. */
+/* numBlocks is filled based on the output data being filled into the output buffer that was passed in VIDDEC3_process */
+/* The return value of this function is NULL when okay; if there is a problem return value < 0, then LIBDCE will print and Error and continue. */
+/* It is up to client to stop when client is not able to read/save the decoded output from output buffer pointer. */
+XDAS_Int32 H264D_MPU_PutDataFxn(XDM_DataSyncHandle dataSyncHandle, XDM_DataSyncDesc *dataSyncDesc)
+{
+    int    numRows;
+
+    DEBUGLOW("-----------------------H264D_MPU_PutDataFxn START--------------------------------dataSyncHandle 0x%x dataSyncDesc->numBlocks %d ",
+        (unsigned int)dataSyncHandle, dataSyncDesc->numBlocks);
+    //Need to read the information in dataSyncDesc->numBlocks which specifies how many numBlocks that are ready in
+    //the output buffer pointer. Only write that much.
+    numRows = dataSyncDesc->numBlocks;
+
+    // This callback should be called when libdce is getting the putDataFxn on the 2nd MmRpc instances.
+    // At this point application/client receive information that numRows is ready in output buffers.
+    // Call the write_partial_output to write the available output YUV NV12 (1 numBlock = 16 row of height on luma section and 8 row of heigh on chroma section.
+
+    if (outBuf_lowlatency) {
+        DEBUGLOW("H264D_MPU_PutDataFxn tiler %d", tiler);
+        if( tiler ) {
+            DEBUGLOW("TILER outArgs->outputID[%d] 0x%x", 0, outArgs->outputID[0]);
+
+            /* calculate offset to region of interest */
+            XDM_Rect   *r = &(outArgs->displayBufs.bufDesc[0].activeFrameRegion);
+
+            DEBUGLOW("r->topLeft.y 0x%x r->topLeft.x 0x%x", r->topLeft.y, r->topLeft.x);
+
+            int    yoff  = (r->topLeft.y * STRIDE) + r->topLeft.x;
+            int    uvoff = (r->topLeft.y * (STRIDE / 2)) + (STRIDE * padded_height) + r->topLeft.x;
+
+            DEBUGLOW("outBuf_lowlatency 0x%x yoff 0x%x uvoff 0x%x numRow_y_offset %d", (unsigned int) outBuf_lowlatency, yoff, uvoff, numRow_y_offset);
+            DEBUGLOW("H264D_MPU_PutDataFxn TILER getting partial output buffer on outBuf_lowlatency : (%p) y 0x%x uv 0x%x",
+                outBuf_lowlatency, (unsigned int) outBuf_lowlatency + yoff, (unsigned int) outBuf_lowlatency + uvoff);
+            write_partial_output(out_pattern, outBuf_lowlatency + yoff, outBuf_lowlatency + uvoff, STRIDE, numRows);
+        } else {
+            DEBUGLOW("NONTILER outArgs->outputID[%d] 0x%x", 0, outArgs->outputID[0]);
+
+            /* calculate offset to region of interest */
+            XDM_Rect   *r = &(outArgs->displayBufs.bufDesc[0].activeFrameRegion);
+
+            DEBUGLOW("r->topLeft.y 0x%x r->topLeft.x 0x%x", r->topLeft.y, r->topLeft.x);
+
+            int    yoff  = (r->topLeft.y * padded_width) + r->topLeft.x;
+            int    uvoff = (r->topLeft.y * (padded_width / 2)) + (padded_height * padded_width) + r->topLeft.x;
+
+            DEBUGLOW("outBuf_lowlatency 0x%x yoff 0x%x uvoff 0x%x numRow_y_offset %d", (unsigned int) outBuf_lowlatency, yoff, uvoff, numRow_y_offset);
+            DEBUGLOW("H264D_MPU_PutDataFxn nonTILER getting partial output buffer on outBuf_lowlatency : (%p) y 0x%x uv 0x%x",
+                outBuf_lowlatency, (unsigned int) outBuf_lowlatency + yoff, (unsigned int) outBuf_lowlatency + uvoff);
+            write_partial_output(out_pattern, outBuf_lowlatency + yoff, outBuf_lowlatency + uvoff, padded_width, numRows);
+        }
+    }
+
+    DEBUGLOW("-----------------------H264D_MPU_PutDataFxn END--------------------------------");
+    return (0);
+}
+
+
 /* decoder body */
 int main(int argc, char * *argv)
 {
     Engine_Error     ec;
     XDAS_Int32       err;
     char            *input = NULL;
-    char            *in_pattern, *out_pattern, *frameData;
-    int              in_cnt = 0, out_cnt = 0;
+    char            *in_pattern, *frameData;
+    int              in_cnt = 0;
     int              oned, stride;
     unsigned int     frameCount = 0;
     FILE            *frameFile;
@@ -605,8 +815,10 @@ int main(int argc, char * *argv)
     char             *temp_data = NULL;
     char             vid_codec[10];
     char             tilerbuffer[10];
+    char             row_mode[10];
     unsigned int     codec_switch = 0;
     Bool             outBufsInUse = FALSE;
+    int              datamode;
 
 #ifdef PROFILE_TIME
     uint64_t    init_start_time = 0;
@@ -616,7 +828,7 @@ int main(int argc, char * *argv)
 #endif
 
 #if 0
-    int    loop = 0;
+    volatile int loop = 0;
 
     while( loop == 0 ) {
         loop = 0;
@@ -632,21 +844,21 @@ int main(int argc, char * *argv)
         oned = FALSE;
     }
 
-    if( argc != 9 ) {
-        printf("usage:   %s width height frames_to_write framefile inpattern outpattern codec tilerbuffer\n", argv[0]);
-        printf("example: %s 320 240 30 frame.txt in.h264 out.yuv h264 tiler\n", argv[0]);
-        printf("example: %s 640 480 30 frame.txt in.m4v out.yuv mpeg4 nontiler\n", argv[0]);
-        printf("example: %s 720 480 30 frame.txt in.vc1 out.yuv vc1ap tiler\n", argv[0]);
-        printf("example: %s 320 240 30 frame.txt in.vc1 out.yuv vc1smp nontiler\n", argv[0]);
-        printf("example: %s 1280 720 30 frame.txt in.bin out.yuv mjpeg tiler\n", argv[0]);
-        printf("example: %s 1920 1088 30 frame.txt in.bin out.yuv mpeg2 nontiler\n", argv[0]);
+    if( argc != 10 ) {
+        printf("usage:   %s width height frames_to_write framefile inpattern outpattern codec tilerbuffer mode\n", argv[0]);
+        printf("example: %s 320 240 30 frame.txt in.h264 out.yuv h264 tiler numrow/slice/fixed/full\n", argv[0]);
+        printf("example: %s 640 480 30 frame.txt in.m4v out.yuv mpeg4 nontiler full\n", argv[0]);
+        printf("example: %s 720 480 30 frame.txt in.vc1 out.yuv vc1ap tiler full\n", argv[0]);
+        printf("example: %s 320 240 30 frame.txt in.vc1 out.yuv vc1smp nontiler full\n", argv[0]);
+        printf("example: %s 1280 720 30 frame.txt in.bin out.yuv mjpeg tiler full\n", argv[0]);
+        printf("example: %s 1920 1088 30 frame.txt in.bin out.yuv mpeg2 nontiler full\n", argv[0]);
         printf("Currently supported codecs: h264, mpeg4, vc1ap, vc1smp, mjpeg, mpeg2\n");
         return (1);
     }
 
-    /* error checking? */
-    width  = atoi(argv[1]);
-    height = atoi(argv[2]);
+    // Extracting the input parameters
+    orig_width  = atoi(argv[1]);
+    orig_height = atoi(argv[2]);
     frames_to_write = atoi(argv[3]);
     frameData   = argv[4];
     in_pattern  = argv[5];
@@ -655,9 +867,14 @@ int main(int argc, char * *argv)
     strcpy(vid_codec, temp_data);
     temp_data = argv[8];
     strcpy(tilerbuffer, temp_data);
+    temp_data = argv[9];
+    strcpy(row_mode, temp_data);
 
     printf("Selected codec: %s\n", vid_codec);
     printf("Selected buffer: %s\n", tilerbuffer);
+    printf("Decode mode: %s\n", row_mode);
+    printf("in_pattern: %s\n", in_pattern);
+    printf("out_pattern: %s\n", out_pattern);
 
     if( frames_to_write == -1 ) {
         /* Default : 30 frames to write into output file */
@@ -676,7 +893,6 @@ int main(int argc, char * *argv)
     if((!(strcmp(vid_codec, "h264")))) {
         ivahd_decode_type = IVAHD_H264_DECODE;
         codec_switch = DCE_TEST_H264;
-
     } else if((!(strcmp(vid_codec, "mpeg4")))) {
         ivahd_decode_type = IVAHD_MP4V_DECODE;
         codec_switch = DCE_TEST_MPEG4;
@@ -702,6 +918,28 @@ int main(int argc, char * *argv)
         return (1);
     }
 
+    if((!(strcmp(row_mode, "full")))) {
+        datamode = IVIDEO_ENTIREFRAME;
+    } else if ((!(strcmp(row_mode, "numrow")))) {
+        datamode = IVIDEO_NUMROWS;
+    } else if ((!(strcmp(row_mode, "slice")))) {
+        datamode = IVIDEO_SLICEMODE;
+        ERROR("SLICE mode is not supported.");
+        goto shutdown;
+    } else if ((!(strcmp(row_mode, "fixed")))) {
+        datamode = IVIDEO_FIXEDLENGTH;
+        ERROR("FIXED LENGTH mode is not supported.");
+        goto shutdown;
+    } else {
+        ERROR("WRONG argument mode %s", row_mode);
+        goto shutdown;
+    }
+
+    if( (ivahd_decode_type != IVAHD_H264_DECODE) && (datamode != IVIDEO_ENTIREFRAME) ) {
+        ERROR("WRONG argument codec type %s mode %s", vid_codec, row_mode);
+        goto shutdown;
+    }
+
     DEBUG("Storing frame size data");
     frameFile = fopen(frameData, "rb");
     DEBUG("frameFile open %p errno %d", frameFile, errno);
@@ -723,11 +961,11 @@ int main(int argc, char * *argv)
         }
     }
 
-    DEBUG("Num Frames is %d width=%d, height=%d", frameCount, width, height);
+    DEBUG("Num Frames is %d orig_width=%d, orig_height=%d width=%d height=%d", frameCount, orig_width, orig_height, width, height);
 
     /* calculate output buffer parameters: */
-    width  = ALIGN2(width, 4);         /* round up to MB */
-    height = ALIGN2(height, 4);        /* round up to MB */
+    width  = ALIGN2(orig_width, 4);         /* round up to MB */
+    height = ALIGN2(orig_height, 4);        /* round up to MB */
 
     switch( codec_switch ) {
         case DCE_TEST_H264 :
@@ -741,7 +979,7 @@ int main(int argc, char * *argv)
         case DCE_TEST_MPEG4 :
             padded_width = ALIGN2(width + PADX_MPEG4, 7);
             padded_height = height + PADY_MPEG4;
-            num_buffers = 8;
+            num_buffers = 4;
             break;
         case DCE_TEST_VC1SMP :
         case DCE_TEST_VC1AP :
@@ -767,8 +1005,8 @@ int main(int argc, char * *argv)
         stride = 4096;
     }
 
-    DEBUG("padded_width=%d, padded_height=%d, stride=%d, num_buffers=%d",
-          padded_width, padded_height, stride, num_buffers);
+    DEBUG("width=%d, height=%dpadded_width=%d, padded_height=%d, stride=%d, num_buffers=%d",
+          width, height, padded_width, padded_height, stride, num_buffers);
 #ifdef PROFILE_TIME
     init_start_time = mark_microsecond(NULL);
 #endif
@@ -790,12 +1028,24 @@ int main(int argc, char * *argv)
             }
             params->size = sizeof(IH264VDEC_Params);
             params->maxBitRate      = 10000000;
-            params->displayDelay    = IVIDDEC3_DISPLAY_DELAY_AUTO;
-            params->numOutputDataUnits  = 0;
+            if (datamode == IVIDEO_NUMROWS) {
+                // Constraint: display order not being same as decode order with IVIDDEC3_Params::outputDataMode = IVIDEO_NUMROWS, is an erroneous situation
+                params->displayDelay    = IVIDDEC3_DECODE_ORDER;
+                DEBUG("low latency with IVIDDEC3_DECODE_ORDER");
+                // If outputDataMode == IVIDEO_NUMROWS, then it defines the frequency
+                // at which decoder should inform to application about data availability.
+                // For example, numOutputDataUnits = 2 means that after every 2MB row (2*16 lines)
+                // availability in display buffer, decoder should inform to application.
+                params->numOutputDataUnits  = numBlock;
+            } else if (datamode == IVIDEO_ENTIREFRAME) {
+                params->displayDelay    = IVIDDEC3_DISPLAY_DELAY_AUTO;
+                params->numOutputDataUnits  = 0;
+            }
             params->maxWidth            = width;
+
             break;
         case DCE_TEST_MPEG4 :
-            params = dce_alloc(sizeof(IMPEG4VDEC_Params));
+           params = dce_alloc(sizeof(IMPEG4VDEC_Params));
             if( !params ) {
                 ERROR("DCE_TEST_FAIL: Parameter memory allocation failed");
                 goto out;
@@ -852,13 +1102,18 @@ int main(int argc, char * *argv)
     params->dataEndianness      = XDM_BYTE;
     params->forceChromaFormat   = XDM_YUV_420SP;
     params->operatingMode       = IVIDEO_DECODE_ONLY;
-    //params->displayDelay        = IVIDDEC3_DECODE_ORDER;
     params->displayBufsMode     = IVIDDEC3_DISPLAYBUFS_EMBEDDED;
     params->inputDataMode       = IVIDEO_ENTIREFRAME;
     params->metadataType[0]     = IVIDEO_METADATAPLANE_NONE;
     params->metadataType[1]     = IVIDEO_METADATAPLANE_NONE;
     params->metadataType[2]     = IVIDEO_METADATAPLANE_NONE;
-    params->outputDataMode      = IVIDEO_ENTIREFRAME;
+
+    if (datamode == IVIDEO_NUMROWS) {
+        params->outputDataMode      = IVIDEO_NUMROWS;
+    } else if (datamode == IVIDEO_ENTIREFRAME) {
+        params->outputDataMode      = IVIDEO_ENTIREFRAME;
+    }
+
     params->numInputDataUnits   = 0;
     params->errorInfoMode       = IVIDEO_ERRORINFO_OFF;
 
@@ -952,6 +1207,11 @@ int main(int argc, char * *argv)
         case DCE_TEST_H264 :
             dynParams = dce_alloc(sizeof(IH264VDEC_DynamicParams));
             dynParams->size = sizeof(IH264VDEC_DynamicParams);
+            if (datamode == IVIDEO_NUMROWS) {
+                dynParams->putDataFxn = (XDM_DataSyncPutFxn) H264D_MPU_PutDataFxn;
+                dynParams->putDataHandle = codec;
+                DEBUG("dynParams->putDataFxn %p dynParams->putDataHandle 0x%x", dynParams->putDataFxn, (unsigned int) dynParams->putDataHandle);
+            }
             break;
         case DCE_TEST_MPEG4 :
             dynParams = dce_alloc(sizeof(IMPEG4VDEC_DynamicParams));
@@ -991,8 +1251,9 @@ int main(int argc, char * *argv)
 #ifdef GETVERSION
     // Allocating memory to store the Codec version information from Codec.
     char *codec_version = NULL;
+    DEBUG("Codec version Size %d ", sizeof(VERSION_SIZE));
     codec_version = dce_alloc(VERSION_SIZE);
-    DEBUG("codec_version 0x%x", codec_version);
+    DEBUG("codec_version 0x%x", (unsigned int) codec_version);
 #endif
 
     switch( codec_switch ) {
@@ -1144,10 +1405,11 @@ int main(int argc, char * *argv)
 
     DEBUG("VIDDEC3_control XDM_SETPARAMS successful");
 
-    DEBUG("input buffer configuration width %d height %d", width, height);
+    DEBUG("input buffer configuration orig_width %d orig_height %d width %d height %d", orig_width, orig_height, width, height);
+
     inBufs = dce_alloc(sizeof(XDM2_BufDesc));
     inBufs->numBufs = 1;
-    input = dce_alloc(width * height);
+    input = dce_alloc(orig_width * orig_height);
     inBufs->descs[0].buf = (XDAS_Int8 *)input;
     inBufs->descs[0].memType = XDM_MEMTYPE_RAW;
 
@@ -1173,6 +1435,27 @@ int main(int argc, char * *argv)
         err = output_allocate_nonTiler(outBufs, num_buffers,
                                        padded_width, padded_height, stride);
     }
+
+    if (datamode == IVIDEO_NUMROWS) {
+        y_buffer = dce_alloc(width * height);
+        if (!y_buffer) {
+            ERROR("Failed to allocate luma buffer for temporary Y buffer on Low Latency case");
+            goto shutdown;
+        }
+        orig_y_buffer = y_buffer;
+        uv_buffer = dce_alloc(width * height/2);
+        if (!uv_buffer) {
+            ERROR("Failed to allocate chroma buffer for temporary UV buffer on Low Latency case");
+            goto shutdown;
+        }
+        orig_uv_buffer = uv_buffer;
+
+        if (tiler) {
+            output_uv_offset = output_y_offset + (4096 * height);
+        } else {
+            output_uv_offset = output_y_offset + (width * height);
+        }
+   }
 
 #ifdef PROFILE_TIME
     output_alloc_time = mark_microsecond(&alloc_time_start);
@@ -1344,20 +1627,28 @@ int main(int argc, char * *argv)
         fflush(inputDump);
         fclose(inputDump);
         inputDump = NULL;
-    #endif
+#endif
 
         int    iters = 0;
 
         do {
-            DEBUG("Calling VIDDEC3_process inArgs->inputID=%x inBufs->descs[0].buf %p inBufs->descs.bufSize %d input %p",
+            DEBUG("Calling VIDDEC3_process inArgs->inputID=%d inBufs->descs[0].buf %p inBufs->descs.bufSize %d input %p",
                   inArgs->inputID, inBufs->descs[0].buf, (int) inBufs->descs[0].bufSize.bytes, input);
 #ifdef PROFILE_TIME
             codec_process_time = mark_microsecond(NULL);
 #endif
+
+            if (datamode == IVIDEO_NUMROWS) {
+                outBuf_lowlatency = (Char*) outBufs->descs[0].buf;
+                DEBUG("Before calling VIDDEC3_process checking outBufs %p outBufs->descs[0].buf %p outBuf_lowlatency %p",
+                    outBufs, outBufs->descs[0].buf, outBuf_lowlatency);
+            }
+
             err = VIDDEC3_process(codec, inBufs, outBufs, inArgs, outArgs);
 #ifdef PROFILE_TIME
             INFO("processed returned in: %llu us", (uint64_t) mark_microsecond(&codec_process_time));
 #endif
+            DEBUG("VIDDEC3_process complete");
             if( err == DCE_EXDM_FAIL ) {
                 if( XDM_ISFATALERROR(outArgs->extendedError)) {
                     ERROR("process returned error: %d\n", err);
@@ -1400,51 +1691,62 @@ int main(int argc, char * *argv)
                          goto shutdown;
                   }
 
-            /*
-             * Handling of output data from codec
-             */
-            if( tiler ) {
-                for( i = 0; outArgs->outputID[i]; i++ ) {
-                    /* calculate offset to region of interest */
-                    XDM_Rect   *r = &(outArgs->displayBufs.bufDesc[0].activeFrameRegion);
+            if (datamode == IVIDEO_ENTIREFRAME) {
+                /*
+                 * Handling of output data from codec
+                 */
+                DEBUG("low latency check outArgs->outputID[0] %p", (void*) outArgs->outputID[0]);
+                if( tiler ) {
+                    for( i = 0; outArgs->outputID[i]; i++ ) {
+                        /* calculate offset to region of interest */
+                        XDM_Rect   *r = &(outArgs->displayBufs.bufDesc[0].activeFrameRegion);
 
-                    int    yoff  = (r->topLeft.y * stride) + r->topLeft.x;
-                    int    uvoff = (r->topLeft.y * stride / 2) + (stride * padded_height) + r->topLeft.x;
+                        int    yoff  = (r->topLeft.y * stride) + r->topLeft.x;
+                        int    uvoff = (r->topLeft.y * stride / 2) + (stride * padded_height) + r->topLeft.x;
 
-                    /* get the output buffer and write it to file */
-                    buf = (OutputBuffer *)outArgs->outputID[i];
-                    DEBUG("pop: %d (%p)", out_cnt, buf);
+                        /* get the output buffer and write it to file */
+                        buf = (OutputBuffer *)outArgs->outputID[i];
+                        DEBUG("pop: %d (%p)", out_cnt, buf);
 
-                    if( out_cnt < frames_to_write ) {  // write first 30 frames to output file out_cnt < 300
-                        write_output(out_pattern, out_cnt++, buf->buf + yoff,
+                        DEBUG("TILER buf->buf %p yoff 0x%x uvoff 0x%x", buf->buf, yoff, uvoff);
+
+                        if( out_cnt < frames_to_write ) {  // write first 30 frames to output file out_cnt < 300
+                            write_output(out_pattern, out_cnt++, buf->buf + yoff,
                                      buf->buf + uvoff, stride);
-                    } else {
-                        out_cnt++;
+                        } else {
+                            out_cnt++;
+                        }
                     }
-                }
-            } else {
-                for( i = 0; outArgs->outputID[i]; i++ ) {
-                    /* calculate offset to region of interest */
-                    XDM_Rect   *r = &(outArgs->displayBufs.bufDesc[0].activeFrameRegion);
+                } else {
+                    for( i = 0; outArgs->outputID[i]; i++ ) {
+                        /* calculate offset to region of interest */
+                        XDM_Rect   *r = &(outArgs->displayBufs.bufDesc[0].activeFrameRegion);
 
-                    int    yoff  = (r->topLeft.y * padded_width) + r->topLeft.x;
-                    int    uvoff = (r->topLeft.y * padded_width / 2) + (padded_height * padded_width) + r->topLeft.x;
+                        int    yoff  = (r->topLeft.y * padded_width) + r->topLeft.x;
+                        int    uvoff = (r->topLeft.y * padded_width / 2) + (padded_height * padded_width) + r->topLeft.x;
 
-                    /* get the output buffer and write it to file */
-                    buf = (OutputBuffer *)outArgs->outputID[i];
-                    DEBUG("pop: %d (%p)", out_cnt, buf);
+                        /* get the output buffer and write it to file */
+                        buf = (OutputBuffer *)outArgs->outputID[i];
+                        DEBUG("pop: %d (%p)", out_cnt, buf);
 
-                    if( out_cnt < frames_to_write ) {  // write  first frames_to_write frames to output file as
-                        write_output(out_pattern, out_cnt++, buf->buf + yoff,
+                        DEBUG("NONTILER buf->buf %p yoff 0x%x uvoff 0x%x", buf->buf, yoff, uvoff);
+
+                        if( out_cnt < frames_to_write ) {  // write  first frames_to_write frames to output file as
+                            write_output(out_pattern, out_cnt++, buf->buf + yoff,
                                      buf->buf + uvoff, padded_width);
-                    } else {
-                        out_cnt++;
+                        } else {
+                            out_cnt++;
+                        }
                     }
                 }
             }
 
+            if (datamode == IVIDEO_NUMROWS) {
+                DEBUG("Check outArgs->freeBufID[0] %p", (void*) outArgs->freeBufID[0]);
+            }
+
             for( i = 0; outArgs->freeBufID[i]; i++ ) {
-                DEBUG("freeBufID[%d] = %d", i, outArgs->freeBufID[i]);
+                DEBUG("freeBufID[%d] = %p", i, (void*) outArgs->freeBufID[i]);
                 buf = (OutputBuffer *)outArgs->freeBufID[i];
                 output_release(buf);
             }
@@ -1463,8 +1765,10 @@ int main(int argc, char * *argv)
 
 shutdown:
 
-    printf("\nDeleting codec...\n");
-    VIDDEC3_delete(codec);
+    printf("\nDeleting codec 0x%x...\n", (unsigned int) codec);
+    if( codec ) {
+        VIDDEC3_delete(codec);
+    }
 
 out:
     if( engine ) {
@@ -1493,6 +1797,16 @@ out:
     }
     if( input ) {
         dce_free(input);
+    }
+
+    if (datamode == IVIDEO_NUMROWS) {
+        if (y_buffer) {
+            dce_free(y_buffer);
+        }
+
+        if (uv_buffer) {
+            dce_free(uv_buffer);
+        }
     }
 
     output_free();

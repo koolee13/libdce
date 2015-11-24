@@ -57,19 +57,19 @@ extern int dce_debug;
 #ifdef BUILDOS_QNX
 #include <sys/slog.h>
 #define TRACE(lvl,FMT, ...)  do if ((lvl) <= dce_debug) { \
-        slogf(42, _SLOG_INFO, "%s:%d:\t%s\terror: " FMT, __FILE__, __LINE__, __FUNCTION__, ##__VA_ARGS__); \
+        slogf(42, _SLOG_INFO, "%s:%d:\t%s\t" FMT, __FILE__, __LINE__, __FUNCTION__, ##__VA_ARGS__); \
 } while( 0 )
 
 #elif defined BUILDOS_LINUX
 #define TRACE(lvl,FMT, ...)  do if ((lvl) <= dce_debug) { \
-        printf("%s:%d:\t%s\t Error: "FMT,__FILE__, __LINE__,__FUNCTION__ ,##__VA_ARGS__); \
+        printf("%s:%d:\t%s\t" FMT,__FILE__, __LINE__,__FUNCTION__ ,##__VA_ARGS__); \
 }while( 0 )
 
 #elif defined BUILDOS_ANDROID
 #include <utils/Log.h>
 #define LOG_TAG "libdce"
 #define TRACE(lvl,FMT, ...)  do if ((lvl) <= dce_debug) { \
-        ALOGE("%s:%d:\t%s\t Error: "FMT,__FILE__, __LINE__,__FUNCTION__ ,##__VA_ARGS__); \
+        ALOGE("%s:%d:\t%s\t" FMT,__FILE__, __LINE__,__FUNCTION__ ,##__VA_ARGS__); \
 }while( 0 )
 #endif
 

@@ -39,9 +39,9 @@ Options:
 
 Examples:
 1. Encoding h.264
-   dce_enc_test width height inpattern outpattern codec profile level
-   example to encode H.264 QCIF with Profile baseline and Level 1.0
-   dce_enc_test 176 144 inputfile.yuv outputfile.h264 h264 baseline 10
+   dce_enc_test width height inpattern outpattern codec profile level buffertype mode
+   example to encode H.264 QCIF with Profile baseline and Level 1.0; nontiler; full frame.
+   dce_enc_test 176 144 inputfile.yuv outputfile.h264 h264 baseline 10 nontiler full
 
    Acceptable input value for profile:
  	baseline
@@ -65,10 +65,20 @@ Examples:
 	50 - Level 5.0
 	51 - Level 5.1
 
+   Acceptable input value for buffertype:
+        tiler (beware of ERRATA i878)
+        nontiler
+
+   Acceptable input value for mode:
+        numrow
+        slice
+        fixed
+        full
+
 2. encoding Mpeg4
-   dce_enc_test width height inpattern outpattern codec profile 0
-   example to encode MPEG4 QCIF with profile simple level 0
-   dce_enc_test 176 144 inputfile.yuv outputfile.mpeg4 mpeg4 0 0
+   dce_enc_test width height inpattern outpattern codec profile 0 buffertype mode
+   example to encode MPEG4 QCIF with profile simple level 0; nontiler; full frame.
+   dce_enc_test 176 144 inputfile.yuv outputfile.mpeg4 mpeg4 0 0 nontiler full
 
    Acceptable input value for profile:
    	0 - MPEG4 SIMPLE PROFILE LEVEL 0
@@ -80,10 +90,17 @@ Examples:
    	5 - MPEG4 SIMPLE PROFILE LEVEL 5
    	6 - MPEG4 SIMPLE PROFILE LEVEL 6
 
+   Acceptable input value for buffertype:
+        tiler (beware of ERRATA i878)
+        nontiler
+
+   Acceptable input value for mode:
+        full
+
 3. Encoding H.263
-   dce_enc_test width height inpattern outpattern codec profile 0
-   example to encode H.263 QCIF with profile simple level 0
-   dce_enc_test 176 144 inputfile.yuv outputfile.h263 h263 0 0
+   dce_enc_test width height inpattern outpattern codec profile 0 buffertype mode
+   example to encode H.263 QCIF with profile simple level 0; nontiler; full frame.
+   dce_enc_test 176 144 inputfile.yuv outputfile.h263 h263 0 0 nontiler full
 
    Acceptable input value for profile:
   	10 - H.263 BASELINE PROFILE LEVEL 10
@@ -95,4 +112,11 @@ Examples:
   	60 - H.263 BASELINE PROFILE LEVEL 60
   	70 - H.263 BASELINE PROFILE LEVEL 70
 
-Currently supported codecs: h264 and mpeg4
+   Acceptable input value for buffertype:
+        tiler (beware of ERRATA i878)
+        nontiler
+
+   Acceptable input value for mode:
+        full
+
+Currently supported codecs: h264, mpeg4 and h263

@@ -63,6 +63,12 @@ typedef enum dce_rpc_call {
     DCE_RPC_CODEC_DELETE
 } dce_rpc_call;
 
+//Enumeration for dce function callback
+typedef enum dce_callback_rpc_call {
+    DCE_CALLBACK_RPC_GET_DATAFXN = 0,
+    DCE_CALLBACK_RPC_PUT_DATAFXN,
+    DCE_CALLBACK_RPC_GET_BUFFERFXN
+} dce_callback_rpc_call;
 
 typedef enum dce_codec_type {
     OMAP_DCE_VIDENC2 = 1,
