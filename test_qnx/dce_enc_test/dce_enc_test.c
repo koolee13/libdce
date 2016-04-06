@@ -406,9 +406,17 @@ static const char *get_path(const char *pattern, int cnt)
 
 int read_partial_input(const char *pattern, int cnt, char *input, int rowmode, int numBlock)
 {
-    int    sz = 0, n = 0, num_planes, i, buf_height;
+    int    sz = 0, n = 0, num_planes, i, buf_height,uv_max,y_max;
     char *input_y = (char *) ((int) input + dest_y_offset);
     char *input_uv = (char *) ((int) input + dest_uv_offset);
+
+    if( tiler ) {
+         uv_max = 4096 * height * 1.5;
+         y_max  = 4096 * height;
+    } else {
+         uv_max = width * height * 1.5;
+         y_max  = width * height;
+    }
 
     const char   *path = get_path(pattern, cnt);
     if( path == NULL ) {
@@ -437,7 +445,7 @@ int read_partial_input(const char *pattern, int cnt, char *input, int rowmode, i
 
         for( i = 0; i < buf_height; i++ ) {
             if( num_planes ) { // UV location - num_plane = 1
-                if( dest_uv_offset < (width * height * 1.5) ) {
+                if( dest_uv_offset < uv_max ) {
                     lseek(fd, input_uv_offset, SEEK_SET);
                     n = read(fd, input_uv , width);
                     if( n ) {
@@ -461,7 +469,7 @@ int read_partial_input(const char *pattern, int cnt, char *input, int rowmode, i
                 //DEBUGLOW("dest_uv_offset %d >= width * height * 1.5 %d", (int)dest_uv_offset, (int) (width * height * 1.5));
                 }
             } else { // Y location - num_plane = 0
-                if( dest_y_offset < (width * height) ) {
+                if( dest_y_offset < y_max ) {
                     lseek(fd, input_y_offset, SEEK_SET);
                     n = read(fd, input_y , width);
                     if( n ) {
@@ -1445,11 +1453,7 @@ int main(int argc, char * *argv)
 #endif
 
     if (datamode == IVIDEO_NUMROWS) {
-        if( tiler ) {
-            input_uv_offset = input_y_offset + (4096 * height);
-        } else {
-            input_uv_offset = input_y_offset + (width * height);
-        }
+        input_uv_offset = input_y_offset + (width * height);
         DEBUG("input_y_offset %d input_uv_offset %d ", input_y_offset, input_uv_offset);
     }
 
@@ -1772,13 +1776,8 @@ int main(int argc, char * *argv)
 
         if (datamode == IVIDEO_NUMROWS) {
             // Reset to the next frame; when VIDENC2_process return; 1 input frame should be encoded.
-            if( tiler ) {
-                input_y_offset += (4096 * height/2);
-                input_uv_offset += (4096 * height);
-            } else {
-                input_y_offset += (width * height/2);
-                input_uv_offset += (width * height);
-            }
+            input_y_offset += (width * height/2);
+            input_uv_offset += (width * height);
             DEBUG("input_y_offset %d input_uv_offset %d", input_y_offset, input_uv_offset);
         }
     }
