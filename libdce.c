@@ -565,6 +565,44 @@ EXIT:
     return;
 }
 
+ /*===============================================================*/
+/** get_rproc_info : Get Information from the Remote proc.
+ *
+ * @ param engine    [in]    : Engine Handle obtained in Engine_open() call.
+ * @ param info_type [in]    : Information type as defined in the rproc_info_type
++ */
+int32_t get_rproc_info(Engine_Handle engine, rproc_info_type info_type)
+{
+    MmRpc_FxnCtx        fxnCtx;
+    int32_t             fxnRet;
+    dce_error_status    eError = DCE_EOK;
+    int32_t             coreIdx = INVALID_CORE;
+    int                 tableIdx = -1;
+
+    /*Acquire permission to use IPC*/
+    pthread_mutex_lock(&ipc_mutex);
+
+    _ASSERT(engine != NULL, DCE_EINVALID_INPUT);
+
+    /* Marshall function arguments into the send buffer */
+    Fill_MmRpc_fxnCtx(&fxnCtx, DCE_RPC_GET_INFO, 1, 0, NULL);
+    Fill_MmRpc_fxnCtx_Scalar_Params(&(fxnCtx.params[0]), sizeof(rproc_info_type), (int32_t)info_type);
+
+    coreIdx = getCoreIndexFromEngine(engine, &tableIdx);
+    _ASSERT(coreIdx != INVALID_CORE,DCE_EINVALID_INPUT);
+
+    /* Invoke the Remote function through MmRpc */
+    eError = MmRpc_call(MmRpcHandle[coreIdx], &fxnCtx, &fxnRet);
+    _ASSERT(eError == DCE_EOK, DCE_EIPC_CALL_FAIL);
+
+EXIT:
+    /*Relinquish IPC*/
+    pthread_mutex_unlock(&ipc_mutex);
+
+    return fxnRet;
+}
+
+
 /*===============================================================*/
 /** Functions create(), control(), get_version(), process(), delete() are common codec
  * glue function signatures which are same for both encoder and decoder

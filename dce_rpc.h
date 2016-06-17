@@ -60,7 +60,8 @@ typedef enum dce_rpc_call {
     DCE_RPC_CODEC_CONTROL,
     DCE_RPC_CODEC_GET_VERSION,
     DCE_RPC_CODEC_PROCESS,
-    DCE_RPC_CODEC_DELETE
+    DCE_RPC_CODEC_DELETE,
+    DCE_RPC_GET_INFO
 } dce_rpc_call;
 
 //Enumeration for dce function callback

@@ -58,6 +58,13 @@ typedef enum dce_error_status {
     DCE_EOMAPDRM_FAIL = -7
 } dce_error_status;
 
+
+typedef enum rproc_info_type {
+    RPROC_CPU_LOAD = 0,
+    RPROC_TOTAL_HEAP_SIZE = 1,
+    RPROC_AVAILABLE_HEAP_SIZE = 2
+} rproc_info_type;
+
 /***************************** Memory Allocation/Free APIs *****************************/
 /*=====================================================================================*/
 /** dce_alloc               : Allocate the Data structures passed to codec-engine APIs
@@ -182,6 +189,14 @@ int dce_get_fd();
  */
 void dce_set_fd(int fd);
 
+
+ /*===============================================================*/
+/** get_rproc_info : Get Information from the Remote proc.
+ *
+ * @ param engine    [in]    : Engine Handle obtained in Engine_open() call.
+ * @ param info_type [in]    : Information type as defined in the rproc_info_type
++ */
+int32_t get_rproc_info(Engine_Handle engine, rproc_info_type info_type);
 
 #endif /* __LIBDCE_H__ */
 
