@@ -1175,7 +1175,7 @@ XDAS_Int32 VIDDEC3_process(VIDDEC3_Handle codec,
     ret = process(codec, inBufs, outBufs, inArgs, outArgs, OMAP_DCE_VIDDEC3);
     DEBUG("<< ret=%d", ret);
 
-    if( (callbackmsg[id]).row_mode ) {
+    if( (id >= 0) && ((callbackmsg[id]).row_mode) ) {
         DEBUG("(callbackmsg[%d]).receive_numBlocks %d >= (callbackmsg[%d]).total_numBlocks %d",
             id, (callbackmsg[id]).receive_numBlocks, id, (callbackmsg[id]).total_numBlocks);
 
@@ -1386,7 +1386,7 @@ XDAS_Int32 VIDENC2_process(VIDENC2_Handle codec,
     ret = process(codec, inBufs, outBufs, inArgs, outArgs, OMAP_DCE_VIDENC2);
     DEBUG("<< ret=%d", ret);
 
-    if( (callbackmsg[id]).row_mode ) {
+    if( (id >= 0) && ((callbackmsg[id]).row_mode) ) {
         /* Stop the callback to request to client */
         DEBUG("Stop the callback to client callbackmsg[%d]->getDataFlag %d", id, (callbackmsg[id]).getDataFlag);
         (callbackmsg[id]).getDataFlag = 0;
