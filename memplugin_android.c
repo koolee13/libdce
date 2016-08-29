@@ -51,6 +51,7 @@
 int                    OmapDrm_FD  = INVALID_DRM_FD;
 struct omap_device    *OmapDev     = NULL;
 extern pthread_mutex_t    ipc_mutex;
+extern int is_ipc_ready;
 
 int memplugin_open()
 {
@@ -75,14 +76,6 @@ int memplugin_open()
     pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE);
     pthread_mutex_init(&ipc_mutex, &attr);
 
-    if (dce_ipc_init(IPU) != MEM_EOK) {
-        omap_device_del(OmapDev);
-        OmapDev = NULL;
-        close(OmapDrm_FD);
-        OmapDrm_FD = INVALID_DRM_FD;
-        return MEM_EOPEN_FAILURE;
-    }
-
     return MEM_EOK;
 }
 
@@ -99,7 +92,15 @@ int memplugin_close()
     * this channel is used only for GEM buffer register/unregister,
     * hence call deinit with -1 for the engine table index
     */
+
+    /*Acquire permission to use IPC*/
+    pthread_mutex_lock(&ipc_mutex);
+
     dce_ipc_deinit(IPU, -1);
+    is_ipc_ready = 0;
+
+    /*Relinquish IPC*/
+    pthread_mutex_unlock(&ipc_mutex);
 
     return MEM_EOK;
 }
