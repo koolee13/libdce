@@ -81,9 +81,12 @@ int memplugin_open()
 
 int memplugin_close()
 {
-    omap_device_del(OmapDev);
-    OmapDev = NULL;
-    if (OmapDrm_FD) {
+    if (OmapDev) {
+        omap_device_del(OmapDev);
+        OmapDev = NULL;
+    }
+
+    if (OmapDrm_FD > 0) {
         close(OmapDrm_FD);
         OmapDrm_FD = INVALID_DRM_FD;
     }
