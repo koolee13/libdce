@@ -119,9 +119,11 @@ void *memplugin_alloc(int sz, int height, MemRegion region, int align, int flags
     }
 
     h = omap_bo_map(bo);
+
+    h->ptr = h + 1;
     memset(H2P(h), 0, sz);
+
     h->size = sz;
-    h->ptr = h + sizeof(MemHeader);
     /* get the fd from drm which needs to be closed by memplugin_free */
     h->dma_buf_fd = omap_bo_dmabuf(bo);
     h->region = region;
