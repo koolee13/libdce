@@ -114,7 +114,8 @@ int memplugin_close()
 void *memplugin_alloc(int sz, int height, MemRegion region, int align, int flags)
 {
     MemHeader        *h = NULL;
-    struct omap_bo   *bo = omap_bo_new(OmapDev, sz + sizeof(MemHeader), OMAP_BO_WC);
+    struct omap_bo   *bo = omap_bo_new(OmapDev, sz + sizeof(MemHeader),
+            OMAP_BO_WC | OMAP_BO_SCANOUT);
 
     if( !bo ) {
         return (NULL);
@@ -172,7 +173,8 @@ void *memplugin_alloc_noheader(MemHeader *memHdr, int sz, int height, MemRegion 
     if (!memHdr)
         return NULL;
 
-    struct omap_bo   *bo = omap_bo_new(OmapDev, sz, OMAP_BO_WC);
+    struct omap_bo   *bo = omap_bo_new(OmapDev, sz,
+            OMAP_BO_WC | OMAP_BO_SCANOUT);
 
     if( !bo ) {
         return (NULL);
