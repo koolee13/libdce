@@ -99,8 +99,10 @@ int memplugin_close()
     /*Acquire permission to use IPC*/
     pthread_mutex_lock(&ipc_mutex);
 
-    dce_ipc_deinit(IPU, -1);
-    is_ipc_ready = 0;
+    if (is_ipc_ready) {
+        dce_ipc_deinit(IPU, -1);
+        is_ipc_ready = 0;
+    }
 
     /*Relinquish IPC*/
     pthread_mutex_unlock(&ipc_mutex);

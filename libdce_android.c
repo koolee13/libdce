@@ -45,6 +45,7 @@
 extern MmRpc_Handle    MmRpcHandle[];
 extern pthread_mutex_t    ipc_mutex;
 int is_ipc_ready = 0;
+static int dce_buf_count = 0;
 
 int dce_buf_lock(int num, size_t *handle)
 {
@@ -113,4 +114,10 @@ EXIT:
     return (eError);
 }
 
-
+void dce_ipc_recover(void)
+{
+    if (is_ipc_ready) {
+        dce_ipc_deinit(IPU, -1);
+        is_ipc_ready = 0;
+    }
+}

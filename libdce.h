@@ -132,6 +132,12 @@ int dce_ipc_init(int core);
  */
 void dce_ipc_deinit(int core, int tableIdx);
 
+/*===============================================================*/
+/** dce_ipc_recover         : Recover the DCE IPC in case of
+ *                            remote core crash.
+ */
+void dce_ipc_recover(void);
+
 /************************ Input/Output Buffer Lock/Unlock APIs ************************/
 /*=====================================================================================*/
 /** dce_buf_lock            : Pin or lock Tiler Buffers which would be used by the IVAHD codec
