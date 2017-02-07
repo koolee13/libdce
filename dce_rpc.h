@@ -49,7 +49,7 @@
 #define MAX_OUTPUT_BUFPTRS 2//To take care bufs and bufSizes in viddec2 case
 #define MAX_TOTAL_BUF (MAX_INPUT_BUF + MAX_OUTPUT_BUF + MAX_OUTPUT_BUFPTRS)
 
-#define MAX_INSTANCES 4
+#define MAX_INSTANCES 6 // aligned with IPUMM definitions for MAX instances i.e.,5,  + 1 for persistent system
 /* Message-Ids:
  */
 //#define DCE_RPC_CONNECT         (0x80000000 | 00) Connect not needed anymore.

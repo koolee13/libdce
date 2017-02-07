@@ -1032,7 +1032,7 @@ VIDDEC3_Handle VIDDEC3_create(Engine_Handle engine, String name,
 
     id = get_callback(0);
     if (id < 0) {
-        /* This is depended on the MAX_INSTANCE, by default it handles only 4 instances of codec instance (full frame or low latency) */
+        /* This is depended on the MAX_INSTANCE, by default it handles only 5 instances of codec instance (full frame or low latency) */
         ERROR("Failed because too many codec clients, Max is %d. MAX_INSTANCES default needs to be changed if required.", MAX_INSTANCES);
         goto EXIT;
     } else { /* Found empty array to be populated */
@@ -1254,7 +1254,7 @@ VIDENC2_Handle VIDENC2_create(Engine_Handle engine, String name,
 
     id = get_callback(0);
     if( id < 0 ) {
-        /* This is depended on the MAX_INSTANCE, by default it handles only 4 instances of codec instance (full frame or low latency) */
+        /* This is depended on the MAX_INSTANCE, by default it handles only 5 instances of codec instance (full frame or low latency) */
         ERROR("Failed because too many codec clients, Max is %d. MAX_INSTANCES default needs to be changed if required.", MAX_INSTANCES);
         goto EXIT;
     } else { /* Found empty array to be populated */
