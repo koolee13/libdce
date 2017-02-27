@@ -45,7 +45,6 @@
 extern MmRpc_Handle    MmRpcHandle[];
 extern pthread_mutex_t    ipc_mutex;
 int is_ipc_ready = 0;
-static int dce_buf_count = 0;
 
 int dce_buf_lock(int num, size_t *handle)
 {
@@ -91,6 +90,11 @@ int dce_buf_unlock(int num, size_t *handle)
     dce_error_status    eError = DCE_EOK;
 
     pthread_mutex_lock(&ipc_mutex);
+
+    if (!is_ipc_ready) {
+        pthread_mutex_unlock(&ipc_mutex);
+        return DCE_EIPC_CALL_FAIL;
+    }
 
     _ASSERT(num > 0, DCE_EINVALID_INPUT);
 
