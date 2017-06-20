@@ -1682,6 +1682,21 @@ int main(int argc, char * *argv)
                     }
                 } else {
                     DEBUG("Non-fatal err=%d, extendedError=%08x", err, outArgs->extendedError);
+                    if (ivahd_decode_type == IVAHD_MP2V_DECODE) {
+                        err = VIDDEC3_control(codec, XDM_GETSTATUS, (VIDDEC3_DynamicParams *) mpeg2_dynParams, (VIDDEC3_Status *) mpeg2_status);
+                        DEBUG("XDM_GETSTATUS mpeg2_status->extendedErrorCode0 %08x", (uint)mpeg2_status->extendedErrorCode0); //Bit 0 to 31 of the error status
+                        DEBUG("XDM_GETSTATUS mpeg2_status->extendedErrorCode1 %08x", (uint)mpeg2_status->extendedErrorCode1); //Bit 32 to 63 of the error status
+                        DEBUG("XDM_GETSTATUS mpeg2_status->extendedErrorCode2 %08x", (uint)mpeg2_status->extendedErrorCode2); //Bit 64 to 95 of the error status
+                        DEBUG("XDM_GETSTATUS mpeg2_status->extendedErrorCode3 %08x", (uint)mpeg2_status->extendedErrorCode3); //Bit 96 to 127 of the error status
+                    }
+
+                    if ((ivahd_decode_type == IVAHD_VC1AP_DECODE) || (ivahd_decode_type == IVAHD_VC1SMP_DECODE)) {
+                        err = VIDDEC3_control(codec, XDM_GETSTATUS, (VIDDEC3_DynamicParams *) vc1_dynParams, (VIDDEC3_Status *) vc1_status);
+                        DEBUG("XDM_GETSTATUS vc1_status->extendedErrorCode0 %08x", (uint)vc1_status->extendedErrorCode0); //Bit 0 to 31 of the error status
+                        DEBUG("XDM_GETSTATUS vc1_status->extendedErrorCode1 %08x", (uint)vc1_status->extendedErrorCode1); //Bit 32 to 63 of the error status
+                        DEBUG("XDM_GETSTATUS vc1_status->extendedErrorCode2 %08x", (uint)vc1_status->extendedErrorCode2); //Bit 64 to 95 of the error status
+                        DEBUG("XDM_GETSTATUS vc1_status->extendedErrorCode3 %08x", (uint)vc1_status->extendedErrorCode3); //Bit 96 to 127 of the error status
+                    }
                     err = XDM_EOK;
                 }
             }else if(( err == DCE_EXDM_UNSUPPORTED ) ||
