@@ -44,8 +44,8 @@
 
 
 #define MAX_NAME_LENGTH 32
-#define MAX_INPUT_BUF 2 // Need to confirm for interlaced YUVs for Encoders
-#define MAX_OUTPUT_BUF 2
+#define MAX_INPUT_BUF 16 // Based on the XDM_MAX_IO_BUFFERS value for XDM2_BufDesc
+#define MAX_OUTPUT_BUF 16 // Based on the XDM_MAX_IO_BUFFERS value for XDM2_BufDesc
 #define MAX_OUTPUT_BUFPTRS 2//To take care bufs and bufSizes in viddec2 case
 #define MAX_TOTAL_BUF (MAX_INPUT_BUF + MAX_OUTPUT_BUF + MAX_OUTPUT_BUFPTRS)
 
