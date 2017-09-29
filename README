@@ -411,17 +411,17 @@ If (BUILDOS_LINUX) {
 ************ Version Info of Headers included in packages folder ***********
 ******** Version might not match due to no change in the interfaces ********
 Tools:
-XDC version  : xdctools_3_30_06_67_core
+XDC version  : xdctools_3_50_03_33_core
 CE version   : codec_engine_3_24_00_08
 XDAIS version: xdais_7_24_00_04
-FC version: framework_components_3_40_01_04
+FC version: framework_components_3_40_02_07
 
 IVAHD_Codecs:
 H.264 Enc  : 02.00.09.01
 MPEG-4 Enc : 01.00.02.01
-H.264 Dec  : 02.00.17.01
-MPEG-4 Dec : 01.00.15.01
-MPEG-2 Dec : 01.00.14.01
-VC-1 Dec   : 01.00.02.00
-MJPEG Dec  : 01.00.13.01
 MJPEG Enc  : 01.00.17.01
+H.264 Dec  : 02.00.21.01
+MPEG-4 Dec : 01.00.15.01
+MPEG-2 Dec : 01.00.17.01
+VC-1 Dec   : 01.00.02.05
+MJPEG Dec  : 01.00.16.01
