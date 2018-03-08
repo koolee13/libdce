@@ -17,6 +17,8 @@ LOCAL_C_INCLUDES += \
     external/libdrm/omap \
     external/libdrm
 
+LOCAL_HEADER_LIBRARIES += libutils_headers
+
 LOCAL_SHARED_LIBRARIES := \
     libmmrpc \
     libc \
